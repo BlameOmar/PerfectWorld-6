@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<GameData>
+	<LocalizedText>
+		<Row Tag="LOC_PERFECTWORLD_6_NAME" Language="en_US">
+			<Text>PerfectWorld 6</Text>
+		</Row>
+		<Row Tag="LOC_PERFECTWORLD_6_DESC" Language="en_US">
+			<Text>Simulated semi-psuedo-quasi-realistic climate.</Text>
+		</Row>
+	</LocalizedText>
+</GameData>

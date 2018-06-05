@@ -1,0 +1,38 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="12.0" DefaultTargets="Default" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Default</Configuration>
+    <Name>PerfectWorld 6</Name>
+    <Guid>2b90bece-a40f-44db-8590-4538460cfa20</Guid>
+    <ProjectGuid>909bf9f3-8013-4649-8280-ea793600bb91</ProjectGuid>
+    <ModVersion>1</ModVersion>
+    <Teaser>Simulated semi-psuedo-quasi-realistic climate for Civilization 6.</Teaser>
+    <Description>A port of PerfectWorld3 (version 5) to Civilization 6.</Description>
+    <Authors>Omar Stefan Evans</Authors>
+    <SpecialThanks>Bobert13, LamilLerran, Rich Marinaccio</SpecialThanks>
+    <AffectsSavedGames>true</AffectsSavedGames>
+    <SupportsSinglePlayer>true</SupportsSinglePlayer>
+    <SupportsMultiplayer>true</SupportsMultiplayer>
+    <SupportsHotSeat>true</SupportsHotSeat>
+    <AssemblyName>PerfectWorld6</AssemblyName>
+    <RootNamespace>PerfectWorld6</RootNamespace>
+    <FrontEndActionData><![CDATA[<FrontEndActions><UpdateText id="AddLocalizedText"><File>PerfectWorld_Text.xml</File></UpdateText><UpdateDatabase id="AddMapToList"><File>PerfectWorld_Map.xml</File></UpdateDatabase></FrontEndActions>]]></FrontEndActionData>
+    <InGameActionData><![CDATA[<InGameActions><ImportFiles id="AddMap"><File>PerfectWorld.lua</File></ImportFiles></InGameActions>]]></InGameActionData>
+    <Homepage>http://https://github.com/BlameOmar/PerfectWorld-6</Homepage>
+  </PropertyGroup>
+  <PropertyGroup Condition=" '$(Configuration)' == 'Default' ">
+    <OutputPath>.</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="PerfectWorld.lua">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="PerfectWorld_Map.xml">
+      <SubType>Content</SubType>
+    </Content>
+    <Content Include="PerfectWorld_Text.xml">
+      <SubType>Content</SubType>
+    </Content>
+  </ItemGroup>
+  <Import Project="$(MSBuildLocalExtensionPath)Civ6.targets" />
+</Project>
