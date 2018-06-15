@@ -2898,7 +2898,6 @@ function GenerateRainfallMap(elevation_map)
 	for i = 1,#sortedSummerMap,1 do
 		local x = sortedSummerMap[i][1]
 		local y = sortedSummerMap[i][2]
-		local pressure = sortedSummerMap[i][3]
 		DistributeRain(x,y,elevation_map,temperature_map,summerMap,rainfallSummerMap,moistureMap,false)
 	end
 
@@ -2907,7 +2906,6 @@ function GenerateRainfallMap(elevation_map)
 	for i = 1,#sortedWinterMap,1 do
 		local x = sortedWinterMap[i][1]
 		local y = sortedWinterMap[i][2]
-		local pressure = sortedWinterMap[i][3]
 		DistributeRain(x,y,elevation_map,temperature_map,winterMap,rainfallWinterMap,moistureMap,false)
 	end
 
