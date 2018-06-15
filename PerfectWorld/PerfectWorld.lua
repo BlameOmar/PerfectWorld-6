@@ -2051,34 +2051,19 @@ function RiverMap:SetJunctionAltitudes()
 			local vertNeighbor = self.riverData[i]
 			local westNeighbor = nil
 			local eastNeighbor = nil
-			local xx = nil
-			local yy = nil
-			local ii = nil
 
 			--first do north
 			westNeighbor = self:GetRiverHexNeighbor(vertNeighbor.northJunction,true)
 			eastNeighbor = self:GetRiverHexNeighbor(vertNeighbor.northJunction,false)
 
 			if westNeighbor ~= nil then
-				ii = g_ElevationMap:GetIndex(westNeighbor.x,westNeighbor.y)
-			else
-				ii = -1
-			end
-
-			if ii ~= -1 then
-				westAltitude = g_ElevationMap.data[ii]
+				westAltitude = g_ElevationMap.data[g_ElevationMap:GetIndex(westNeighbor.x,westNeighbor.y)]
 			else
 				westAltitude = vertAltitude
 			end
 
 			if eastNeighbor ~= nil then
-				ii = g_ElevationMap:GetIndex(eastNeighbor.x, eastNeighbor.y)
-			else
-				ii = -1
-			end
-
-			if ii ~= -1 then
-				eastAltitude = g_ElevationMap.data[ii]
+				eastAltitude = g_ElevationMap.data[g_ElevationMap:GetIndex(eastNeighbor.x, eastNeighbor.y)]
 			else
 				eastAltitude = vertAltitude
 			end
@@ -2090,25 +2075,13 @@ function RiverMap:SetJunctionAltitudes()
 			eastNeighbor = self:GetRiverHexNeighbor(vertNeighbor.southJunction,false)
 
 			if westNeighbor ~= nil then
-				ii = g_ElevationMap:GetIndex(westNeighbor.x,westNeighbor.y)
-			else
-				ii = -1
-			end
-
-			if ii ~= -1 then
-				westAltitude = g_ElevationMap.data[ii]
+				westAltitude = g_ElevationMap.data[g_ElevationMap:GetIndex(westNeighbor.x,westNeighbor.y)]
 			else
 				westAltitude = vertAltitude
 			end
 
 			if eastNeighbor ~= nil then
-				ii = g_ElevationMap:GetIndex(eastNeighbor.x, eastNeighbor.y)
-			else
-				ii = -1
-			end
-
-			if ii ~= -1 then
-				eastAltitude = g_ElevationMap.data[ii]
+				eastAltitude = g_ElevationMap.data[g_ElevationMap:GetIndex(eastNeighbor.x, eastNeighbor.y)]
 			else
 				eastAltitude = vertAltitude
 			end
