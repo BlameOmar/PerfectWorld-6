@@ -3054,12 +3054,7 @@ function DistributeRain(x,y,elevation_map,temperature_map,pressureMap,rainfall_m
 end
 -------------------------------------------------------------------------------------------
 function GetRainCost(upLiftSource,upLiftDest)
-	local cost = mc.minimumRainCost
-	cost = math.max(mc.minimumRainCost, cost + upLiftDest - upLiftSource)
-	if cost < 0.0 then
-		cost = 0.0
-	end
-	return cost
+	return math.max(mc.minimumRainCost, mc.minimumRainCost + upLiftDest - upLiftSource)
 end
 -------------------------------------------------------------------------------------------
 function GetDifferenceAroundHex(i)
