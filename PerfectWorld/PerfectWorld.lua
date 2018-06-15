@@ -2862,7 +2862,7 @@ function GenerateRainfallMap(elevation_map)
 				incX = -1
 			else
 				xStart = 0
-				xStop = elevation_map.width
+				xStop = elevation_map.width - 1
 				incX = 1
 			end
 			--print(string.format("yStart = %d, yStop = %d, incY = %d",yStart,yStop,incY))
@@ -2873,15 +2873,15 @@ function GenerateRainfallMap(elevation_map)
 				--each line should start on water to avoid vast areas without rain
 				local xxStart = xStart
 				local xxStop = xStop
-				for xx = xStart,xStop - incX, incX do
+				for xx = xStart,xStop, incX do
 					local i = elevation_map:GetIndex(xx,y)
 					if elevation_map:IsBelowSeaLevel(xx,y) then
 						xxStart = xx
-						xxStop = xx + elevation_map.width * incX
+						xxStop = xx + (elevation_map.width - 1) * incX
 						break
 					end
 				end
-				for x = xxStart,xxStop - incX,incX do
+				for x = xxStart,xxStop,incX do
 					local i = elevation_map:GetIndex(x,y)
 					sortedGeoMap[geoIndex] = {x,y,geoMap.data[i]}
 					geoIndex = geoIndex + 1
