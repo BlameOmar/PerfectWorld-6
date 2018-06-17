@@ -3956,14 +3956,77 @@ end
 
 function PW_Matrix:FillWith(fill_func)
 	if not fill_func then return end
-	for i = 0, rows - 1 do
-		for j = 0, columns - 1 do
-			obj.data_[obj.index_(i, j)] = fill_func(i, j)
+	for i = 0, self.rows_ - 1 do
+		for j = 0, self.cols_ - 1 do
+			self.data_[self.index_(i, j)] = fill_func(i, j)
 		end
 	end
 end
 
+--------------------------------------------------------------------------------
+
+-- Tests for PW_Matrix
+PW_Tests.MatrixTests = {}
+
+function PW_Tests.MatrixTests.TestInitialization()
+	local matrix = PW_Matrix:New(2, 3)
+	if matrix:NumRows() ~= 2 then return PW_Status:Error("Wrong number of rows") end
+	if matrix:NumCols() ~= 3 then return PW_Status:Error("Wrong number of columns") end
+
+	if not matrix:AcceptsIndex(0, 0) then return PW_Status:Error("Zero based matrix does not accept (0, 0)") end
+	if matrix:AcceptsIndex(2, 3) then return PW_Status:Error("Matrix has incorrect bounds") end
+
+	for i = 0, matrix:NumRows() - 1 do
+		for j = 0, matrix:NumCols() - 1 do
+			if matrix:Get(i, j) ~= nil then return PW_Status:Error("Matrix not entirely empty") end
+		end
+	end
+
+	function fill(i, j)
+		return (i + 1) * (j + 1) ^ 2
+	end
+
+	matrix = PW_Matrix:New(3, 3, fill)
+	for i = 0, matrix:NumRows() - 1 do
+		for j = 0, matrix:NumCols() - 1 do
+			if matrix:Get(i, j) ~= fill(i, j) then return PW_Status:Error("Matrix not filled properly") end
+		end
+	end
+end
+
+function PW_Tests.MatrixTests.TestFillWith()
+	local matrix = PW_Matrix:New(3, 3)
+
+	function fill(i, j)
+		return (i + 1) * (j + 1) ^ 2
+	end
+
+	matrix:FillWith(fill)
+	for i = 0, matrix:NumRows() - 1 do
+		for j = 0, matrix:NumCols() - 1 do
+			if matrix:Get(i, j) ~= fill(i, j) then return PW_Status:Error("Matrix not filled properly") end
+		end
+	end
+end
+
+function PW_Tests.MatrixTests.TestReset()
+	local matrix = PW_Matrix:New(3, 3)
+	
+	if matrix:Get(0, 1) ~= nil then return PW_Status:Error("Value in matrix set unexpectedly") end
+	
+	matrix:Reset(0, 1, "apple")
+	if matrix:Get(0, 1) ~= "apple" then return PW_Status:Error("Value in matrix not set to expected value") end
+	
+	matrix:Reset(0, 1, "banana")
+	if matrix:Get(0, 1) ~= "banana" then return PW_Status:Error("Value in matrix not updated to expected value") end
+	
+	matrix:Reset(0, 1)
+	if matrix:Get(0, 1) ~= nil then return PW_Status:Error("Value in matrix not erased") end
+end
+
+--------------------------------------------------------------------------------
 -- Stuff to remove.
+--------------------------------------------------------------------------------
 
 function PW_RectMap:DeprecatedGetIndexForDataIndex(data_index)
 	local i, j = self.matrix_:DeprecatedGetIndexForDataIndex(data_index)
@@ -4038,7 +4101,7 @@ PW_ERROR_CODE_ALREADY_EXISTS = 8
 
 PW_Status = {}
 
-function PW_Status:New(error_code, error_message)
+function PW_Status:New(error_message, error_code)
 	local obj = {}
 	setmetatable(obj, {__index = self})
 
@@ -4075,18 +4138,20 @@ function PW_RunAllTests()
 	local tests_run = 0
 	local failed_tests = 0
 
-	for name, test_suite in pairs(PW_Tests) do
-		PW_Log("Running tests in " .. name)
+	for suite_name, test_suite in pairs(PW_Tests) do
 		for name, test in pairs(test_suite) do
 			local status = test()
+			local prefix = "[SUCCESS] "
+			local suffix = ""
 			if status and status:is_error() then
-				result = "FAILURE"
+				prefix = "[FAILURE] "
+				if status.error_message ~= "" then
+					suffix = " -- " .. status.error_message
+				end
 				failed_tests = failed_tests + 1
-			else
-				result = "SUCCESS"
 			end
 
-			PW_Log(name .. ": " .. result)
+			PW_Log(prefix .. suite_name .. "." .. name .. suffix)
 			tests_run = tests_run + 1
 		end
 	end
