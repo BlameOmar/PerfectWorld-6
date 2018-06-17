@@ -23,6 +23,7 @@
 --
 -- Version History
 --   6.1 - Ported to Civilization 6!
+--         Added tests!
 --         Adjusted maps constants.
 --         World age, temperature, rainfall, and sea level are configurable via advanced options.
 --
@@ -4134,6 +4135,7 @@ end
 
 function PW_RunAllTests()
 	PW_Log("Running Tests")
+	local time = os.clock()
 
 	local tests_run = 0
 	local failed_tests = 0
@@ -4156,7 +4158,7 @@ function PW_RunAllTests()
 		end
 	end
 
-	PW_Log(tests_run .. " tests run; " .. failed_tests .. " failures")
+	PW_Log(string.format("Ran %i tests in %.6f seconds; %i failures", tests_run, os.clock() - time, failed_tests))
 
 	if failed_tests > 0 then error("Tests failed.") end
 end
