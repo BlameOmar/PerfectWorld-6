@@ -79,8 +79,8 @@ function GenerateMap()
 
 	-- Set globals
 	g_Width, g_Height = Map.GetGridSize()
-	g_PlotTypesMap = PWMap:New(g_Width, g_Height, true, true, g_PLOT_TYPE_NONE)
-	g_TerrainTypesMap = PWMap:New(g_Width, g_Height, true, true, g_TERRAIN_TYPE_NONE)
+	g_PlotTypesMap = PW_RectMap:New(g_Width, g_Height, true, true, g_PLOT_TYPE_NONE)
+	g_TerrainTypesMap = PW_RectMap:New(g_Width, g_Height, true, true, g_TERRAIN_TYPE_NONE)
 
 	PWRandSeed()
 	PWGeneratePlotTypes()
@@ -3828,13 +3828,13 @@ end
 -- PerfectWorld 6 Types
 -- #############################################################################
 
-PWMap = {}
+PW_RectMap = {}
 
-function PWMap:New(width, height, wrap_x, wrap_y, default_value)
+function PW_RectMap:New(width, height, wrap_x, wrap_y, default_value)
 	local obj = {}
 	setmetatable(obj, {__index = self})
 
-	obj.matrix_ = PWMatrix:New(height, width, function() return default_value end)
+	obj.matrix_ = PW_Matrix:New(height, width, function() return default_value end)
 	obj.width_ = width
 	obj.height_ = height
 	obj.default_value_ = default_value
@@ -3869,26 +3869,26 @@ function PWMap:New(width, height, wrap_x, wrap_y, default_value)
 	return obj
 end
 
-function PWMap:Height()
+function PW_RectMap:Height()
 	return self.height_
 end
 
-function PWMap:Width()
+function PW_RectMap:Width()
 	return self.width_
 end
 
-function PWMap:Get(x, y)
+function PW_RectMap:Get(x, y)
 	local i, j = self.matrix_index_(x, y)
 	return self.matrix_:Get(i, j)
 end
 
-function PWMap:Reset(x, y, new_value)
+function PW_RectMap:Reset(x, y, new_value)
 	if new_value == nil then new_value = self.default_value_ end
 	local i, j = self.matrix_index_(x, y)
 	return self.matrix_:Reset(i, j, new_value)
 end
 
-function PWMap:FillWith(fill_func)
+function PW_RectMap:FillWith(fill_func)
 	local function matrix_fill_func(x, y)
 		return fill_func(y, x)
 	end
@@ -3897,10 +3897,10 @@ function PWMap:FillWith(fill_func)
 end
 
 -------------------------------------------------------------------------------
--- PWMatrix
+-- PW_Matrix
 -- A zero-based, potentially sparse, row-major matrix.
 -------------------------------------------------------------------------------
-PWMatrix = {}
+PW_Matrix = {}
 
 -- Returns a new matrix.
 --
@@ -3908,14 +3908,14 @@ PWMatrix = {}
 -- cols: the number of columns.
 -- fill_func: an optional function, f(i, j), that supplies an initial value for
 --            the matrix at row i, column j.
-function PWMatrix:New(rows, cols, fill_func)
+function PW_Matrix:New(rows, cols, fill_func)
 	local obj = {}
 	setmetatable(obj, {__index = self})
 
 	obj.rows_ = rows
 	obj.cols_ = cols
 	obj.data_ = {}
-	obj.index_ = function(i, j) return i * obj.rows_ + j end
+	obj.index_ = function(i, j) return 1 + i * obj.rows_ + j end
 
 	if fill_func then
 		for i = 0, rows - 1 do
@@ -3928,33 +3928,33 @@ function PWMatrix:New(rows, cols, fill_func)
 	return obj
 end
 
--- This should be easy to implement via PWMatrix:New; just have fill_func
+-- This should be easy to implement via PW_Matrix:New; just have fill_func
 -- perform the copy.
--- function PWMatrix:Clone()
+-- function PW_Matrix:Clone()
 
-function PWMatrix:NumRows()
+function PW_Matrix:NumRows()
 	return self.rows_
 end
 
-function PWMatrix:NumCols()
+function PW_Matrix:NumCols()
 	return self.cols_
 end
 
-function PWMatrix:AcceptsIndex(i, j)
+function PW_Matrix:AcceptsIndex(i, j)
 	return 0 <= i and i < self.rows_ and 0 <= j and j < self.cols_
 end
 
-function PWMatrix:Get(i, j)
+function PW_Matrix:Get(i, j)
 	assert(self:AcceptsIndex(i, j))
 	return self.data_[self.index_(i, j)]
 end
 
-function PWMatrix:Reset(i, j, value)
+function PW_Matrix:Reset(i, j, value)
 	assert(self:AcceptsIndex(i, j))
 	self.data_[self.index_(i, j)] = value
 end
 
-function PWMatrix:FillWith(fill_func)
+function PW_Matrix:FillWith(fill_func)
 	if not fill_func then return end
 	for i = 0, rows - 1 do
 		for j = 0, columns - 1 do
@@ -3965,14 +3965,14 @@ end
 
 -- Stuff to remove.
 
-function PWMap:DeprecatedGetIndexForDataIndex(data_index)
+function PW_RectMap:DeprecatedGetIndexForDataIndex(data_index)
 	local i, j = self.matrix_:DeprecatedGetIndexForDataIndex(data_index)
 
 	return j, i
 end
 
 
-function PWMatrix:DeprecatedGetIndexForDataIndex(data_index)
+function PW_Matrix:DeprecatedGetIndexForDataIndex(data_index)
 	local j = data_index % self.cols_
 	local i = (data_index - j) / self.cols_
 
