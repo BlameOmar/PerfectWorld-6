@@ -4048,7 +4048,7 @@ function PW_Status:New(error_code, error_message)
 	return obj
 end
 
-function PW_Status:OkStatus()
+function PW_Status:NoError()
 	return self:New("", PW_ERROR_CODE_NO_ERROR)
 end
 
