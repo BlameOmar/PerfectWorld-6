@@ -3890,7 +3890,7 @@ end
 
 function PWMap:FillWith(fill_func)
 	local function matrix_fill_func(x, y)
-		fill_func(y, x)
+		return fill_func(y, x)
 	end
 
 	self.matrix_:FillWith(matrix_fill_func)
