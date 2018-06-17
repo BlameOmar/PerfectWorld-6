@@ -54,13 +54,16 @@ local g_NameString = "PerfectWorld"
 local g_VersionString = "6.1"
 local g_RunTests = true
 
-function PWNameAndVersionString()
+function PW_NameAndVersionString()
 	return "[" .. g_NameString .. " " .. g_VersionString .. "]"
 end
 
-function PWLog(message)
-	print(PWNameAndVersionString() .. ": " .. message)
+function PW_Log(message)
+	print(PW_NameAndVersionString() .. ": " .. message)
 end
+
+-- Test suites will be run if g_RunTests == true.
+PW_Tests = {}
 
 --------------------------------------------------------------------------------
 -- The entry point into the map script.
@@ -69,9 +72,9 @@ local g_Width, g_Height
 local g_PlotTypesMap
 local g_TerrainTypesMap
 function GenerateMap()
-	if g_RunTests then PWRunAllTests() end
+	if g_RunTests then PW_RunAllTests() end
 
-	PWLog("Generating Map")
+	PW_Log("Generating Map")
 	local time = os.clock()
 
 	-- Set globals
@@ -118,7 +121,7 @@ function GenerateMap()
 	local start_plot_database = AssignStartingPlots.Create(args)
 
 	local GoodyGen = AddGoodies(g_Width, g_Height);
-	PWLog(string.format("Generated map in %.3f seconds.", os.clock() - time))
+	PW_Log(string.format("Generated map in %.3f seconds.", os.clock() - time))
 end
 --------------------------------------------------------------------------------
 -- Map Constants and Parameters
@@ -252,15 +255,15 @@ function MapConstants:InitializeWorldAge()
 		age = 1 + TerrainBuilder.GetRandomNumber(3, "Random World Age - PerfectWorld")
 	end
 	if age == 1 then		--Young
-		PWLog("Setting young world constants")
+		PW_Log("Setting young world constants")
 		self.hillsPercent = 0.65	
 		self.mountainsPercent = 0.90
 	elseif age == 3 then	--Old
-		PWLog("Setting old world constants")
+		PW_Log("Setting old world constants")
 		self.hillsPercent = 0.74 		
 		self.mountainsPercent = 0.97 		
 	else									--Standard
-		PWLog("Setting middle aged world constants")
+		PW_Log("Setting middle aged world constants")
 		self.hillsPercent = 0.70 		--Percent of dry land that is below the hill elevation deviance threshold.		
 		self.mountainsPercent = 0.94	--Percent of dry land that is below the mountain elevation deviance threshold. 	
 	end
@@ -272,7 +275,7 @@ function MapConstants:InitializeTemperature()
 		temp = 1 + TerrainBuilder.GetRandomNumber(3, "Random World Temperature Option - PerfectWorld");
 	end
 	if temp == 1 then						--Cold
-		PWLog("Setting cold world constants")
+		PW_Log("Setting cold world constants")
 		self.desertMinTemperature = 0.65
 		self.tundraTemperature = 0.35
 		self.snowTemperature = 0.20
@@ -283,7 +286,7 @@ function MapConstants:InitializeTemperature()
 		self.iceNorthLatitudeLimit = 60
 		self.iceSouthLatitudeLimit = -60
 	elseif temp == 3 then					--Warm
-		PWLog("Setting warm world constants")
+		PW_Log("Setting warm world constants")
 		self.desertMinTemperature = 0.55
 		self.tundraTemperature = 0.26
 		self.snowTemperature = 0.10
@@ -294,7 +297,7 @@ function MapConstants:InitializeTemperature()
 		self.iceNorthLatitudeLimit = 65
 		self.iceSouthLatitudeLimit = -65
 	else									--Standard
-		PWLog("Setting temperate world constants")
+		PW_Log("Setting temperate world constants")
 		self.desertMinTemperature = 0.60	--Coldest absolute temperature allowed to be desert, plains if colder.
 		self.tundraTemperature = 0.31		--Absolute temperature below which is tundra.
 		self.snowTemperature = 0.15 		--Absolute temperature below which is snow.
@@ -313,7 +316,7 @@ function MapConstants:InitializeRainfall()
 		rain = 1 + TerrainBuilder.GetRandomNumber(3, "Random World Rainfall Option - PerfectWorld");
 	end
 	if rain == 1 then					--Arid
-		PWLog("Setting arid world constants")
+		PW_Log("Setting arid world constants")
 		self.desertPercent = 0.33
 		self.plainsPercent = 0.55
 		self.zeroTreesPercent = 0.36
@@ -324,7 +327,7 @@ function MapConstants:InitializeRainfall()
 		self.minRiverSize = 32
 		self.marshElevation = 0.04
 	elseif rain == 3 then				--Wet
-		PWLog("Setting wet world constants")
+		PW_Log("Setting wet world constants")
 		self.desertPercent = 0.20
 		self.plainsPercent = 0.45
 		self.zeroTreesPercent = 0.23
@@ -335,7 +338,7 @@ function MapConstants:InitializeRainfall()
 		self.minRiverSize = 16
 		self.marshElevation = 0.10
 	else								--Standard
-		PWLog("Setting normal rainfall constants")
+		PW_Log("Setting normal rainfall constants")
 		self.desertPercent = 0.25		--Percent of land that is below the desert rainfall threshold.
 		self.plainsPercent = 0.50 		--Percent of land that is below the plains rainfall threshold.
 		self.zeroTreesPercent = 0.28 	--Percent of land that is below the rainfall threshold where no trees can appear.
@@ -357,13 +360,13 @@ function MapConstants:InitializeSeaLevel()
 	
 	local water_percent
 	if sea_level == 1 then -- Low Sea Level
-		PWLog("Setting low sea level")
+		PW_Log("Setting low sea level")
 		water_percent = sea_level_low
 	elseif sea_level == 2 then -- Normal Sea Level
-		PWLog("Setting normal sea level")
+		PW_Log("Setting normal sea level")
 		water_percent = sea_level_normal
 	elseif sea_level == 3 then -- High Sea Level
-		PWLog("Setting high sea level")
+		PW_Log("Setting high sea level")
 		water_percent = sea_level_high
 	else
 		water_percent = TerrainBuilder.GetRandomNumber(sea_level_high - sea_level_low, "Random Sea Level - PerfectWorld") + sea_level_low + 1
@@ -407,10 +410,10 @@ local g_LandTab = {}
 function PWGeneratePlotTypes()
 	-- This function uses lots of globals.
 
-	PWLog("Creating initial map data")
+	PW_Log("Creating initial map data")
 	local W,H = Map.GetGridSize()
 	--first do all the preliminary calculations in this function
-	PWLog(string.format("Map size: width=%d, height=%d",W,H))
+	PW_Log(string.format("Map size: width=%d, height=%d",W,H))
 	mc = MapConstants:New()
 
 	g_ElevationMap = GenerateElevationMap(W,H,true,false)
@@ -419,7 +422,7 @@ function PWGeneratePlotTypes()
 	FillInLakes()
 
 	--now gen plot types
-	PWLog("Generating plot types")
+	PW_Log("Generating plot types")
 	ShiftMaps();
 
 	DiffMap = GenerateDiffMap(W,H,true,false);
@@ -488,7 +491,7 @@ function PWGeneratePlotTypes()
 end
 
 function PWGenerateTerrainTypes()
-	PWLog("Generating terrain")
+	PW_Log("Generating terrain")
 	local W, H = Map.GetGridSize();
 	--first find minimum rain above sea level for a soft desert transition
 	local minRain = math.huge
@@ -3600,7 +3603,7 @@ function Cleanup()
 end
 ------------------------------------------------------------------------------
 function AddFeatures()
-	PWLog("Adding Features");
+	PW_Log("Adding Features");
 	local W, H = Map.GetGridSize()
 	local WH = W*H
 
@@ -3980,12 +3983,28 @@ end
 -- PerfectWorld 6 Math
 -- #############################################################################
 
+-- Tests for math functions.
+PW_Tests.MathTests = {}
+
+--------------------------------------------------------------------------------
+
+-- Wraps a `value` to the closed interval [`min`, `max`].
 function WrapWithinClosedRange(value, min, max)
 	local shifted = value - min
 	local limit = max - min + 1
-	return value % limit + min
+	return shifted % limit + min
 end
 
+function PW_Tests.MathTests.TestWrapWithinClosedRange()
+	if WrapWithinClosedRange(17, 0, 9) ~= 7 then return PW_Status:Error() end
+	if WrapWithinClosedRange(-4, 0, 9) ~= 6 then return PW_Status:Error() end
+	if WrapWithinClosedRange(14, 1, 12) ~= 2 then return PW_Status:Error() end
+	if WrapWithinClosedRange(13, -8, 7) ~= -3 then return PW_Status:Error() end
+end
+
+--------------------------------------------------------------------------------
+
+-- Clamps a `value` to the closed interval [`min`, `max`].
 function ClampToClosedRange(value, min, max)
 	if value < min then
 		return min
@@ -3996,11 +4015,83 @@ function ClampToClosedRange(value, min, max)
 	end
 end
 
+function PW_Tests.MathTests.TestClampToClosedRange()
+	if ClampToClosedRange(-1, 0, 10) ~= 0 then return PW_Status:Error() end
+	if ClampToClosedRange(11, 0, 10) ~= 10 then return PW_Status:Error() end
+	if ClampToClosedRange("alligator", "b", "d") ~= "b" then return PW_Status:Error() end
+	if ClampToClosedRange("dog", "b", "d") ~= "d" then return PW_Status:Error() end
+end
+
 -- #############################################################################
--- PerfectWorld 6 Tests
+-- PerfectWorld 6 Errors
 -- #############################################################################
 
-function PWRunAllTests()
-	PWLog("Running Tests")
-	-- TODO(omar): Add tests to run.
+PW_ERROR_CODE_NO_ERROR = 0
+PW_ERROR_CODE_GENERIC_ERROR = 1
+PW_ERROR_CODE_INTERNAL_ERROR = 2
+PW_ERROR_CODE_NOT_IMPLEMENTED = 3
+PW_ERROR_CODE_INVALID_ARGUMENT = 4
+PW_ERROR_CODE_FAILED_PRECONDITION = 5
+PW_ERROR_CODE_OUT_OF_RANGE = 6
+PW_ERROR_CODE_NOT_FOUND = 7
+PW_ERROR_CODE_ALREADY_EXISTS = 8
+
+PW_Status = {}
+
+function PW_Status:New(error_code, error_message)
+	local obj = {}
+	setmetatable(obj, {__index = self})
+
+	obj.error_code = error_code
+	obj.error_message = error_message
+
+	return obj
+end
+
+function PW_Status:OkStatus()
+	return self:New("", PW_ERROR_CODE_NO_ERROR)
+end
+
+function PW_Status:Error(error_message, error_code)
+	error_message = error_message or ""
+	error_code = error_code or PW_ERROR_CODE_GENERIC_ERROR
+	return self:New(error_message, PW_ERROR_CODE_GENERIC_ERROR)
+end
+
+function PW_Status:is_error()
+	return self.error_code ~= PW_ERROR_CODE_NO_ERROR
+end
+
+-- #############################################################################
+-- PerfectWorld 6 Test Runner
+-- #############################################################################
+
+-- (omar): I did not want to embed a 3k line testing framework like LuaUnit.
+--         We'll just have to use this very primitive test runner instead.
+
+function PW_RunAllTests()
+	PW_Log("Running Tests")
+
+	local tests_run = 0
+	local failed_tests = 0
+
+	for name, test_suite in pairs(PW_Tests) do
+		PW_Log("Running tests in " .. name)
+		for name, test in pairs(test_suite) do
+			local status = test()
+			if status and status:is_error() then
+				result = "FAILURE"
+				failed_tests = failed_tests + 1
+			else
+				result = "SUCCESS"
+			end
+
+			PW_Log(name .. ": " .. result)
+			tests_run = tests_run + 1
+		end
+	end
+
+	PW_Log(tests_run .. " tests run; " .. failed_tests .. " failures")
+
+	if failed_tests > 0 then error("Tests failed.") end
 end
