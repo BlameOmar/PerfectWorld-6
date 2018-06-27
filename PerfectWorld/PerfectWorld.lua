@@ -2679,32 +2679,32 @@ function GenerateElevationMap(width,height,xWrap,yWrap)
 	local mountainFreq = 128/width * mc.mountainFreq --0.05/128
 	local twistMap = GenerateTwistedPerlinMap(width,height,xWrap,yWrap,twistMinFreq,twistMaxFreq,twistVar)
 	local mountainMap = GenerateMountainMap(width,height,xWrap,yWrap,mountainFreq)
-	local g_ElevationMap = ElevationMap:New(width,height,xWrap,yWrap)
+	local elevation_map = ElevationMap:New(width,height,xWrap,yWrap)
 	local i = 0
 	for y = 0,height - 1,1 do
 		for x = 0,width - 1,1 do
 			local tVal = twistMap.data[i]
 			tVal = (math.sin(tVal*math.pi-math.pi*0.5)*0.5+0.5)^0.25 --this formula adds a curve flattening the extremes
-			g_ElevationMap.data[i] = (tVal + ((mountainMap.data[i] * 2) - 1) * mc.mountainWeight)
+			elevation_map.data[i] = (tVal + ((mountainMap.data[i] * 2) - 1) * mc.mountainWeight)
 			i=i+1
 		end
 	end
 
-	g_ElevationMap:Normalize()
+	elevation_map:Normalize()
 
 	--attentuation should not break normalization
 	i = 0
 	for y = 0,height - 1,1 do
 		for x = 0,width - 1,1 do
-			local attenuationFactor = GetAttenuationFactor(g_ElevationMap,x,y)
-			g_ElevationMap.data[i] = g_ElevationMap.data[i] * attenuationFactor
+			local attenuationFactor = GetAttenuationFactor(elevation_map,x,y)
+			elevation_map.data[i] = elevation_map.data[i] * attenuationFactor
 			i=i+1
 		end
 	end
 
-	g_ElevationMap.seaLevelThreshold = g_ElevationMap:FindThresholdFromPercent(mc.landPercent,true,false)
+	elevation_map.seaLevelThreshold = elevation_map:FindThresholdFromPercent(mc.landPercent,true,false)
 
-	return g_ElevationMap
+	return elevation_map
 end
 -------------------------------------------------------------------------------------------
 function FillInLakes()
