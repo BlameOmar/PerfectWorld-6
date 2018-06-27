@@ -418,7 +418,6 @@ function PWGeneratePlotTypes()
 	mc = MapConstants:New()
 
 	g_ElevationMap = GenerateElevationMap(W,H,true,false)
-	--g_ElevationMap:Save("g_ElevationMap.csv")
 	
 	FillInLakes()
 
@@ -479,7 +478,6 @@ function PWGeneratePlotTypes()
 	end
 	
 	g_RainfallMap, g_TemperatureMap = GenerateRainfallMap(g_ElevationMap)
-	--g_RainfallMap:Save("g_RainfallMap.csv")
 
 	g_RiverMap = RiverMap:New(g_ElevationMap)
 	g_RiverMap:SetJunctionAltitudes()
@@ -943,25 +941,6 @@ function FloatMap:GetXYFromIndex(i)
 	return x,y
 end
 -------------------------------------------------------------------------------------------
---quadrants are labeled
---A B
---D C
-function FloatMap:GetQuadrant(x,y)
-	if x < self.width/2 then
-		if y < self.height/2 then
-			return "A"
-		else
-			return "D"
-		end
-	else
-		if y < self.height/2 then
-			return "B"
-		else
-			return "C"
-		end
-	end
-end
--------------------------------------------------------------------------------------------
 --Gets an index for x and y based on the current
 --rect settings. x and y are local to the defined rect.
 --Wrapping is assumed in both directions
@@ -1174,12 +1153,6 @@ function FloatMap:GetGeostrophicPressure(lat)
 	pressure = pressure - 1
 	--print(pressure)
 	return pressure
-end
--------------------------------------------------------------------------------------------
-function FloatMap:ApplyFunction(func)
-	for i = 0,self.length - 1,1 do
-		self.data[i] = func(self.data[i])
-	end
 end
 -------------------------------------------------------------------------------------------
 function GetCircle(i,radius)
@@ -1636,49 +1609,6 @@ function FloatMap:IsOnMap(x,y)
 		return false
 	end
 	return true
-end
--------------------------------------------------------------------------------------------
-function FloatMap:Save(name)
-	print("saving " .. name .. "...")
-	local str = self.width .. "," .. self.height
-	for i = 0,self.length - 1,1 do
-		str = str .. "," .. self.data[i]
-	end
-	local file = io.open(name,"w+")
-	file:write(str)
-	file:close()
-	print("bitmap saved as " .. name .. ".")
-end
--------------------------------------------------------------------------------------------
-function FloatMap:Save4(name)
-	local file = io.open(name,"w+")
-	local first = true
-	local str = ""
-	for y = self.height, 0, -1 do
-		if first then
-			str = "xy,"
-		else
-			str = string.format("%d,",y)
-		end
-		for x = 0, self.width-1 do
-			local i = y*self.width+(x%self.width)
-			if first then
-				if x < self.width-1 then
-					str = str..string.format("%d,",x)
-				else
-					str = str..string.format("%d\n",x)
-				end
-			elseif x < self.width-1 then
-				str = str..string.format("%.12f,",self.data[i])
-			else
-				str = str..string.format("%.12f\n",self.data[i])
-			end
-		end
-		first = false
-		file:write(str)
-	end
-	file:close()
-	print("bitmap saved as "..name..".")
 end
 -------------------------------------------------------------------------------------------
 --ElevationMap class
@@ -2308,11 +2238,9 @@ function RiverMap:SiltifyLakes()
 
 	if lakesFound then
 		print("###ERROR### - Failed to siltify lakes. check logs")
-		--g_ElevationMap:Save4("g_ElevationMap(SiltifyLakes).csv")
 	end
 ]]-- -Bobert13
 --	riverTest:Normalize()
---	riverTest:Save("riverTest.csv")
 end
 -------------------------------------------------------------------------------------------
 function RiverMap:SetFlowDestinations()
@@ -2416,7 +2344,6 @@ function RiverMap:SetRiverSizes(rainfall_map)
 --~ 		end
 --~ 	end
 --~ 	river_map:Normalize()
-	--river_map:Save("riverSizeMap.csv")
 end
 -------------------------------------------------------------------------------------------
 --This function returns the flow directions needed by civ
@@ -2513,7 +2440,6 @@ function GenerateTwistedPerlinMap(width, height, xWrap, yWrap,minFreq,maxFreq,va
 		end
 	end
 	freqMap:Normalize()
---	freqMap:Save("freqMap.csv")
 
 	local twistMap = FloatMap:New(width,height,xWrap,yWrap)
 	i = 0
@@ -2533,7 +2459,6 @@ function GenerateTwistedPerlinMap(width, height, xWrap, yWrap,minFreq,maxFreq,va
 	end
 
 	twistMap:Normalize()
-	--twistMap:Save("twistMap.csv")
 	return twistMap
 end
 -------------------------------------------------------------------------------------------
@@ -2578,10 +2503,7 @@ function GenerateMountainMap(width,height,xWrap,yWrap,initFreq)
 	mountainMap:Normalize()
 	stdDevMap:Deviate(7)
 	stdDevMap:Normalize()
-	--stdDevMap:Save("stdDevMap.csv")
-	--mountainMap:Save("mountainCloud.csv")
 	noiseMap:Normalize()
-	--noiseMap:Save("noiseMap.csv")
 
 	local moundMap = FloatMap:New(width,height,xWrap,yWrap)
 	i = 0
@@ -2600,8 +2522,6 @@ function GenerateMountainMap(width,height,xWrap,yWrap,initFreq)
 		end
 	end
 	mountainMap:Normalize()
-	--mountainMap:Save("premountMap.csv")
-	--moundMap:Save("moundMap.csv")
 	i = 0
 	for y = 0, mountainMap.height - 1,1 do
 		for x = 0,mountainMap.width - 1,1 do
@@ -2616,7 +2536,6 @@ function GenerateMountainMap(width,height,xWrap,yWrap,initFreq)
 			i=i+1
 		end
 	end
-	--mountainMap:Save("premountMap.csv")
 
 	local stdDevThreshold = stdDevMap:FindThresholdFromPercent(mc.landPercent,true,false)
 	i=0
@@ -2631,7 +2550,6 @@ function GenerateMountainMap(width,height,xWrap,yWrap,initFreq)
 	end
 
 	mountainMap:Normalize()
-	--mountainMap:Save("mountainMap.csv")
 	return mountainMap
 end
 -------------------------------------------------------------------------------------------
@@ -2738,7 +2656,6 @@ function GenerateTempMaps(elevation_map)
 		end
 	end
 	aboveSeaLevelMap:Normalize()
-	--aboveSeaLevelMap:Save("aboveSeaLevelMap.csv")
 
 	local summerMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	local zenith = mc.tropicLatitudes
@@ -2800,9 +2717,6 @@ end
 -------------------------------------------------------------------------------------------
 function GenerateRainfallMap(elevation_map)
 	local summerMap,winterMap,temperature_map = GenerateTempMaps(elevation_map)
-	--summerMap:Save("summerMap.csv")
-	--winterMap:Save("winterMap.csv")
-	--temperature_map:Save("temperature_map.csv")
 	local geoMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	local i = 0
 	for y = 0,elevation_map.height - 1,1 do
@@ -2815,7 +2729,6 @@ function GenerateRainfallMap(elevation_map)
 		end
 	end
 	geoMap:Normalize()
-	--geoMap:Save("geoMap.csv")
 	i = 0
 	local sortedSummerMap = {}
 	local sortedWinterMap = {}
@@ -2937,11 +2850,8 @@ function GenerateRainfallMap(elevation_map)
 	end
 
 	rainfallSummerMap:Normalize()
-	--rainfallSummerMap:Save("rainFallSummerMap.csv")
 	rainfallWinterMap:Normalize()
-	--rainfallWinterMap:Save("rainFallWinterMap.csv")
 	rainfallGeostrophicMap:Normalize()
-	--rainfallGeostrophicMap:Save("rainfallGeostrophicMap.csv")
 
 	local rainfall_map = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	i = 0
