@@ -3336,46 +3336,6 @@ function AddRivers()
 	end
 end
 -------------------------------------------------------------------------------------------
---function StartPlotSystem()
---	-- Get Resources setting input by user.
---	local res = Map.GetCustomOption(2)
---	if res == 6 then
---		res = 1 + Map.Rand(3, "Random Resources Option - Lua");
---	end
---
---	local starts = Map.GetCustomOption(1)
---	local divMethod = nil
---	if starts == 1 then
---		divMethod = 2
---	else
---		divMethod = 1
---	end
---
---	print("Creating start plot database.");
---	local start_plot_database = AssignStartingPlots.Create()
---
---	print("Dividing the map in to Regions.");
---	-- Regional Division Method 2: Continental or 1:Terra
---	local args = {
---		method = divMethod,
---		resources = res,
---		};
---	start_plot_database:GenerateRegions(args)
---
---	print("Choosing start locations for civilizations.");
---	start_plot_database:ChooseLocations()
---
---	print("Normalizing start locations and assigning them to Players.");
---	start_plot_database:BalanceAndAssign()
---
---	--error(":P")
---	print("Placing Natural Wonders.");
---	start_plot_database:PlaceNaturalWonders()
---
---	print("Placing Resources and City States.");
---	start_plot_database:PlaceResourcesAndCityStates()
---end
--------------------------------------------------------------------------------------------
 function oceanMatch(x,y)
 	local plot = Map.GetPlot(x,y)
 	if plot:GetPlotType() == PlotTypes.PLOT_OCEAN then
