@@ -3055,37 +3055,25 @@ function PlacePossibleIce(i,W)
 	end
 end
 -------------------------------------------------------------------------------------------
---function GetMapInitData(worldSize)
---	local worldsizes = {
---		[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = {42, 26},
---		[GameInfo.Worlds.WORLDSIZE_TINY.ID] = {52, 32},
---		[GameInfo.Worlds.WORLDSIZE_SMALL.ID] = {64, 40},
---		[GameInfo.Worlds.WORLDSIZE_STANDARD.ID] = {84, 52},
---		[GameInfo.Worlds.WORLDSIZE_LARGE.ID] = {104, 64},
---		[GameInfo.Worlds.WORLDSIZE_HUGE.ID] = {128, 80}
---		}
---	if Map.GetCustomOption(6) == 2 then
---		-- Enlarge terra-style maps to create expansion room on the new world
---		worldsizes = {
---		[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = {52, 32},
---		[GameInfo.Worlds.WORLDSIZE_TINY.ID] = {64, 40},
---		[GameInfo.Worlds.WORLDSIZE_SMALL.ID] = {84, 52},
---		[GameInfo.Worlds.WORLDSIZE_STANDARD.ID] = {104, 64},
---		[GameInfo.Worlds.WORLDSIZE_LARGE.ID] = {122, 76},
---		[GameInfo.Worlds.WORLDSIZE_HUGE.ID] = {144, 90},
---		}
---	end
---	local grid_size = worldsizes[worldSize];
---	--
---	local world = GameInfo.Worlds[worldSize];
---	if(world ~= nil) then
---	return {
---		Width = grid_size[1],
---		Height = grid_size[2],
---		WrapX = true,
---	};
---    end
---end
+function GetMapInitData(world_size)
+	local world_sizes = {
+		[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = {42, 26},
+		[GameInfo.Worlds.WORLDSIZE_TINY.ID] = {52, 32},
+		[GameInfo.Worlds.WORLDSIZE_SMALL.ID] = {64, 40},
+		[GameInfo.Worlds.WORLDSIZE_STANDARD.ID] = {84, 52},
+		[GameInfo.Worlds.WORLDSIZE_LARGE.ID] = {104, 64},
+		[GameInfo.Worlds.WORLDSIZE_HUGE.ID] = {128, 80}
+	}
+	local grid_size = world_sizes[world_size];
+	local world = GameInfo.Worlds[world_size];
+	if(world ~= nil) then
+		return {
+			Width = grid_size[1],
+			Height = grid_size[2],
+			WrapX = true,
+		};
+    end
+end
 -------------------------------------------------------------------------------------------
 --ShiftMap Class
 -------------------------------------------------------------------------------------------
