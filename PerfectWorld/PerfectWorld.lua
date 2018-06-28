@@ -2221,14 +2221,6 @@ end
 -------------------------------------------------------------------------------------------
 function ShuffleList(list)
 	local len = #list
-	for i=0,len - 1,1 do
-		local k = PWRandInt(0,len-1)
-		list[i], list[k] = list[k], list[i]
-	end
-end
--------------------------------------------------------------------------------------------
-function ShuffleList2(list)
-	local len = #list
 	for i=1,len ,1 do
 		local k = PWRandInt(1,len)
 		list[i], list[k] = list[k], list[i]
@@ -2699,7 +2691,7 @@ function PlacePossibleOasis()
 	local oasisTotal = 0
 	local W,H = Map.GetGridSize()
 	local WH = W*H
-	ShuffleList2(g_DesertTab)
+	ShuffleList(g_DesertTab)
 	for k=1,#g_DesertTab do
 		local i = g_DesertTab[k]
 		local plot = Map.GetPlotByIndex(i) --Sets the candidate plot.
