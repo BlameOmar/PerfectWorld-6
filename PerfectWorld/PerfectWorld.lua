@@ -83,7 +83,7 @@ function GenerateMap()
 	g_PlotTypesMap = PW_RectMap:New(g_Width, g_Height, true, true, g_PLOT_TYPE_NONE)
 	g_TerrainTypesMap = PW_RectMap:New(g_Width, g_Height, true, true, g_TERRAIN_TYPE_NONE)
 
-	PWRandSeed()
+	PW_RandSeed()
 	PWGeneratePlotTypes()
 	PWGenerateTerrainTypes()
 	ApplyTerrain(g_PlotTypesMap, g_TerrainTypesMap)
@@ -465,7 +465,7 @@ function PWGeneratePlotTypes()
 			end
 		end
 		if landCount == 0 then
-			local roll1 = PWRandInt(1,3)
+			local roll1 = PW_RandInt(1,3)
 			local x, y = g_PlotTypesMap:DeprecatedGetIndexForDataIndex(i)
 			if roll1 == 1 then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_LAND)
@@ -533,7 +533,7 @@ function PWGenerateTerrainTypes()
 					table.insert(g_DesertTab,i)
 				end
 			elseif g_RainfallMap.data[i] < plainsThreshold then
-				if g_RainfallMap.data[i] < (PWRand() * (plainsThreshold - desertThreshold) + plainsThreshold - desertThreshold)/2.0 + desertThreshold then
+				if g_RainfallMap.data[i] < (PW_Rand() * (plainsThreshold - desertThreshold) + plainsThreshold - desertThreshold)/2.0 + desertThreshold then
 					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
 					table.insert(g_PlainsTab,i)
 				else
@@ -786,31 +786,6 @@ function inheritsFrom( baseClass )
     return new_class
 end
 -------------------------------------------------------------------------------------------
--- Random functions will use lua rands for stand alone script running
--- and Map.rand for in game.
--------------------------------------------------------------------------------------------
-function PWRand()
-	return math.random()
-end
--------------------------------------------------------------------------------------------
-function PWRandSeed(fixedseed)
-	local seed
-	if fixedseed == nil then
-		seed = (TerrainBuilder.GetRandomNumber(32767,"") * 65536) +TerrainBuilder.GetRandomNumber(65535,"")  --This function caps at this number, if you set it any higher, or try to trick it with multiple RNGs that end up with a value above this, it will break randomization. This is 31 bits of precision so... - Bobert13
-	else
-		seed = fixedseed
-	end
-	math.randomseed(seed)
-	print("Random seed for this map is " .. seed.." - PerfectWorld3")
-	
-	PWRand() --Trash the first random to (hopefully) ensure we roll the same exact map given the same seed.
-end
--------------------------------------------------------------------------------------------
---range is inclusive, low and high are possible results
-function PWRandInt(low, high)
-	return math.random(low, high)
-end
--------------------------------------------------------------------------------------------
 -- FloatMap class
 -- This is for storing 2D map data. The 'data' field is a zero based, one
 -- dimensional array. To access map data by x and y coordinates, use the
@@ -989,14 +964,14 @@ end
 -------------------------------------------------------------------------------------------
 function FloatMap:GenerateNoise()
 	for i = 0,self.length - 1,1 do
-		self.data[i] = PWRand()
+		self.data[i] = PW_Rand()
 	end
 
 end
 -------------------------------------------------------------------------------------------
 function FloatMap:GenerateBinaryNoise()
 	for i = 0,self.length - 1,1 do
-		if PWRand() > 0.5 then
+		if PW_Rand() > 0.5 then
 			self.data[i] = 1
 		else
 			self.data[i] = 0
@@ -2017,7 +1992,7 @@ function RiverMap:SetFlowDestinations()
 		local junction = junctionList[n]
 		local validList = self:GetValidFlows(junction)
 		if #validList > 0 then
-			local choice = PWRandInt(1,#validList)
+			local choice = PW_RandInt(1,#validList)
 			junction.flow = validList[choice]
 		else
 			junction.flow = mc.NOFLOW
@@ -2222,7 +2197,7 @@ end
 function ShuffleList(list)
 	local len = #list
 	for i=1,len ,1 do
-		local k = PWRandInt(1,len)
+		local k = PW_RandInt(1,len)
 		list[i], list[k] = list[k], list[i]
 	end
 end
@@ -2750,7 +2725,7 @@ function PlacePossibleOasis()
 					end
 				end
 				if oasisCount == 1 then
-					local roll = PWRandInt(0,1)
+					local roll = PW_RandInt(0,1)
 					if roll == 1 then
 						doplace = false
 					end
@@ -2778,9 +2753,9 @@ function PlacePossibleIce(i,W)
 	if plot:IsWater() then
 		local temp = g_TemperatureMap.data[i]
 		local latitude = g_TemperatureMap:GetLatitudeForY(y)
-		--local randval = PWRand() * (mc.iceMaxTemperature - mc.minWaterTemp) + mc.minWaterTemp * 2
-		local randvalNorth = PWRand() * (mc.iceNorthLatitudeLimit - mc.topLatitude) + mc.topLatitude - 3
-		local randvalSouth = PWRand() * (mc.bottomLatitude - mc.iceSouthLatitudeLimit) + mc.iceSouthLatitudeLimit + 3
+		--local randval = PW_Rand() * (mc.iceMaxTemperature - mc.minWaterTemp) + mc.minWaterTemp * 2
+		local randvalNorth = PW_Rand() * (mc.iceNorthLatitudeLimit - mc.topLatitude) + mc.topLatitude - 3
+		local randvalSouth = PW_Rand() * (mc.bottomLatitude - mc.iceSouthLatitudeLimit) + mc.iceSouthLatitudeLimit + 3
 		--print(string.format("lat = %f, randvalNorth = %f, randvalSouth = %f",latitude,randvalNorth,randvalSouth))
 		if latitude > randvalNorth  or latitude < randvalSouth then
 			TerrainBuilder.SetFeatureType(plot, g_FEATURE_ICE);
@@ -2966,7 +2941,7 @@ function AddLakes()
 			if not plot:IsCoastalLand() then
 				if not plot:IsRiver() then
 					if not plot:GetTerrainType() == Desert then
-						local r = PWRandInt(0,2)
+						local r = PW_RandInt(0,2)
 						if r == 0 then
 							--print(string.format("adding lake at (%d,%d)",x,y))
 							local terrain = plot:GetTerrainType()
@@ -3197,7 +3172,7 @@ function Cleanup()
 				if plot:IsCoastalLand() then
 					if plot:IsRiver() then
 						if plot:GetTerrainType() ~= terrainDesert then
-							local roll = PWRandInt(1,3)
+							local roll = PW_RandInt(1,3)
 							if roll == 1 then
 								plot:SetPlotType(PlotTypes.PLOT_LAND, false, true)
 								plot:SetTerrainType(terrainGrass, true, true)
@@ -3270,19 +3245,19 @@ function AddFeatures()
 				-- There can be forests and marshes.
 				-- local treeRange = jungleThreshold - zeroTreesThreshold
 				if g_TemperatureMap.data[i] > mc.treesMinTemperature and
-						PWRandInt(1, 100) <= 30 * g_RainfallMap.data[i] ^ 2 + 60 then
+						PW_RandInt(1, 100) <= 30 * g_RainfallMap.data[i] ^ 2 + 60 then
 				--if g_TemperatureMap.data[i] > mc.treesMinTemperature and
-				--		g_RainfallMap.data[i] > PWRand() * treeRange + zeroTreesThreshold then
+				--		g_RainfallMap.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
 					TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
 				elseif plot:GetTerrainType() == g_TERRAIN_TYPE_GRASS and
-						PWRandInt(1, 100) <= 20 * g_RainfallMap.data[i] ^ 2 + 10 then
+						PW_RandInt(1, 100) <= 20 * g_RainfallMap.data[i] ^ 2 + 10 then
 					TerrainBuilder.SetFeatureType(plot, g_FEATURE_MARSH)
 				end
 			end
 
 			--if g_RainfallMap.data[i] < jungleThreshold then
 			--	local treeRange = jungleThreshold - zeroTreesThreshold
-			--	if g_RainfallMap.data[i] > PWRand() * treeRange + zeroTreesThreshold then
+			--	if g_RainfallMap.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
 			--		if g_TemperatureMap.data[i] > mc.treesMinTemperature then
 			--			TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
 			--		end
@@ -3301,7 +3276,7 @@ function AddFeatures()
 			--			end
 			--		end
 			--		if desertCount < 4 then
-			--			local roll = PWRandInt(1,100)
+			--			local roll = PW_RandInt(1,100)
 			--			if roll > 4 then
 			--				TerrainBuilder.SetFeatureType(plot, g_FEATURE_JUNGLE)
 			--				ApplyTerrainToPlot(plot, plot_type, g_TERRAIN_TYPE_PLAINS)
@@ -3454,6 +3429,135 @@ function desertMatch(x,y)
 		end
 	end
 	return false
+end
+
+-- #############################################################################
+-- Randomness
+-- #############################################################################
+
+-------------------------------------------------------------------------------------------
+-- RandomLua v0.3.1
+-- Pure Lua Pseudo-Random Numbers Generator
+-- https://github.com/linux-man/randomlua/tree/7b23521a839beca717bd0d4ed0914dd202c83a0a
+--
+-- Copyright(c) 2017 Caldas Lopes A.K.A. linux-man
+-- MIT license
+--
+-- Imported Multiply-With-Carry
+-- FIXME(omar): random does not necessarily return uniformly distributed numbers.
+-------------------------------------------------------------------------------------------
+
+local function normalize(n) --keep numbers at (positive) 32 bits
+	return n % 0x80000000
+end
+
+local function bit_and(a, b)
+	local r = 0
+	local m = 0
+	for m = 0, 31 do
+		if (a % 2 == 1) and (b % 2 == 1) then r = r + 2^m end
+		if a % 2 ~= 0 then a = a - 1 end
+		if b % 2 ~= 0 then b = b - 1 end
+		a = a / 2 b = b / 2
+	end
+	return normalize(r)
+end
+
+local function bit_or(a, b)
+	local r = 0
+	local m = 0
+	for m = 0, 31 do
+		if (a % 2 == 1) or (b % 2 == 1) then r = r + 2^m end
+		if a % 2 ~= 0 then a = a - 1 end
+		if b % 2 ~= 0 then b = b - 1 end
+		a = a / 2 b = b / 2
+	end
+	return normalize(r)
+end
+
+local function bit_xor(a, b)
+	local r = 0
+	local m = 0
+	for m = 0, 31 do
+		if a % 2 ~= b % 2 then r = r + 2^m end
+		if a % 2 ~= 0 then a = a - 1 end
+		if b % 2 ~= 0 then b = b - 1 end
+		a = a / 2 b = b / 2
+	end
+	return normalize(r)
+end
+
+local function seed()
+	--return normalize(tonumber(tostring(os.time()):reverse()))
+	return normalize(os.time())
+end
+
+-- Multiply-with-carry
+multiply_with_carry = {}
+multiply_with_carry.__index = multiply_with_carry
+
+function multiply_with_carry:random(a, b)
+	local m = self.m
+	local t = self.a * self.x + self.c
+	local y = t % m
+	self.x = y
+	self.c = math.floor(t / m)
+	if not a then return y / 0xffff
+	elseif not b then
+		if a == 0 then return y
+		else return 1 + (y % a) end
+	else
+		return a + (y % (b - a + 1))
+	end
+end
+
+function multiply_with_carry:randomseed(s)
+	if not s then s = seed() end
+	self.c = self.ic
+	self.x = normalize(s)
+end
+
+function mwc(s, r)
+	local temp = {}
+	setmetatable(temp, multiply_with_carry)
+	temp.a, temp.c, temp.m = 1103515245, 12345, 0x10000  --from Ansi C
+	if r then
+		if r == 'nr' then temp.a, temp.c, temp.m = 1664525, 1013904223, 0x10000 --from Numerical Recipes.
+		elseif r == 'mvc' then temp.a, temp.c, temp.m = 214013, 2531011, 0x10000 end--from MVC
+	end
+	temp.ic = temp.c
+	temp:randomseed(s)
+	return temp
+end
+
+-------------------------------------------------------------------------------------------
+-- PerfectWorld Random Wrappers
+-------------------------------------------------------------------------------------------
+
+local g_PW_MapRNG = mwc()
+
+-------------------------------------------------------------------------------------------
+-- Random functions will use Multiply-With-Carry RNG for stand alone script running
+-- and Map.rand for in game.
+-------------------------------------------------------------------------------------------
+function PW_Rand()
+	return g_PW_MapRNG:random()
+end
+-------------------------------------------------------------------------------------------
+function PW_RandSeed(fixedseed)
+	local seed
+	if fixedseed == nil then
+		seed = (TerrainBuilder.GetRandomNumber(32767,"") * 65536) +TerrainBuilder.GetRandomNumber(65535,"")  --This function caps at this number, if you set it any higher, or try to trick it with multiple RNGs that end up with a value above this, it will break randomization. This is 31 bits of precision so... - Bobert13
+	else
+		seed = fixedseed
+	end
+	g_PW_MapRNG:randomseed(seed)
+	print("Random seed for this map is " .. seed.." - PerfectWorld3")	
+end
+-------------------------------------------------------------------------------------------
+--range is inclusive, low and high are possible results
+function PW_RandInt(low, high)
+	return g_PW_MapRNG:random(low, high)
 end
 
 -- #############################################################################
