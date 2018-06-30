@@ -3840,7 +3840,6 @@ function PW_Tests.RectMapTests.TestFill()
 
 	for y = 0, rect_map:Height() - 1 do
 		for x = 0, rect_map:Width() - 1 do
-			PW_Log("" ..  rect_map:Get(x, y))
 			if rect_map:Get(x, y) ~= fill(x, y) then return PW_Status:Error("Not filled properly") end
 		end
 	end
@@ -3864,6 +3863,150 @@ function PW_Tests.RectMapTests.TestReset()
 
 	rect_map:Reset(0, 1)
 	if rect_map:Get(0, 1) ~= OPTIONS.default_value then return PW_Status:Error("Value not reset to default value") end
+end
+
+function PW_Tests.RectMapTests.TestWrapXY()
+	local WIDTH = 2
+	local HEIGHT = 2
+	local OPTIONS = {
+		default_value = 0,
+		wrap_x = true,
+		wrap_y = true
+	}
+
+	local rect_map = PW_RectMap:New(WIDTH, HEIGHT, OPTIONS)
+	-- | 0, 2 |
+	-- | 1, 3 |
+	rect_map:Reset(0, 0, 0)
+	rect_map:Reset(0, 1, 1)
+	rect_map:Reset(1, 0, 2)
+	rect_map:Reset(1, 1, 3)
+
+	-- left edge
+	if rect_map:Get(-1, 0) ~= 2 then return PW_Status:Error("Expected (-1, 0) => 2") end
+	if rect_map:Get(-1, 1) ~= 3 then return PW_Status:Error("Expected (-1, 1) => 3") end
+	-- right edge
+	if rect_map:Get(2, 0) ~= 0 then return PW_Status:Error("Expected (2, 0) => 0") end
+	if rect_map:Get(2, 1) ~= 1 then return PW_Status:Error("Expected (2, 1) => 1") end
+	-- top edge
+	if rect_map:Get(0, -1) ~= 1 then return PW_Status:Error("Expected (0, -1) => 1") end
+	if rect_map:Get(1, -1) ~= 3 then return PW_Status:Error("Expected (1, -1) => 3") end
+	-- bottom edge
+	if rect_map:Get(0, 2) ~= 0 then return PW_Status:Error("Expected (0, 2) => 0") end
+	if rect_map:Get(1, 2) ~= 2 then return PW_Status:Error("Expected (1, 2) => 2") end
+	-- corners
+	if rect_map:Get(-1, -1) ~= 3 then return PW_Status:Error("Expected (-1, -1) => 3") end
+	if rect_map:Get(-1, 2) ~= 2 then return PW_Status:Error("Expected (-1, 2) => 2") end
+	if rect_map:Get(2, -1) ~= 1 then return PW_Status:Error("Expected (2, -1) => 1") end
+	if rect_map:Get(2, 2) ~= 0 then return PW_Status:Error("Expected (2, 2) => 0") end
+end
+
+function PW_Tests.RectMapTests.TestWrapX()
+	local WIDTH = 2
+	local HEIGHT = 2
+	local OPTIONS = {
+		default_value = 0,
+		wrap_x = true,
+		wrap_y = false
+	}
+
+	local rect_map = PW_RectMap:New(WIDTH, HEIGHT, OPTIONS)
+	-- | 0, 2 |
+	-- | 1, 3 |
+	rect_map:Reset(0, 0, 0)
+	rect_map:Reset(0, 1, 1)
+	rect_map:Reset(1, 0, 2)
+	rect_map:Reset(1, 1, 3)
+
+	-- left edge
+	if rect_map:Get(-1, 0) ~= 2 then return PW_Status:Error("Expected (-1, 0) => 2") end
+	if rect_map:Get(-1, 1) ~= 3 then return PW_Status:Error("Expected (-1, 1) => 3") end
+	-- right edge
+	if rect_map:Get(2, 0) ~= 0 then return PW_Status:Error("Expected (2, 0) => 0") end
+	if rect_map:Get(2, 1) ~= 1 then return PW_Status:Error("Expected (2, 1) => 1") end
+	-- top edge
+	if rect_map:Get(0, -1) ~= 0 then return PW_Status:Error("Expected (0, -1) => 0") end
+	if rect_map:Get(1, -1) ~= 2 then return PW_Status:Error("Expected (1, -1) => 2") end
+	-- bottom edge
+	if rect_map:Get(0, 2) ~= 1 then return PW_Status:Error("Expected (0, 2) => 1") end
+	if rect_map:Get(1, 2) ~= 3 then return PW_Status:Error("Expected (1, 2) => 3") end
+	-- corners
+	if rect_map:Get(-1, -1) ~= 2 then return PW_Status:Error("Expected (-1, -1) => 2") end
+	if rect_map:Get(-1, 2) ~= 3 then return PW_Status:Error("Expected (-1, 2) => 3") end
+	if rect_map:Get(2, -1) ~= 0 then return PW_Status:Error("Expected (2, -1) => 0") end
+	if rect_map:Get(2, 2) ~= 1 then return PW_Status:Error("Expected (2, 2) => 1") end
+end
+
+function PW_Tests.RectMapTests.TestWrapY()
+	local WIDTH = 2
+	local HEIGHT = 2
+	local OPTIONS = {
+		default_value = 0,
+		wrap_x = false,
+		wrap_y = true
+	}
+
+	local rect_map = PW_RectMap:New(WIDTH, HEIGHT, OPTIONS)
+	-- | 0, 2 |
+	-- | 1, 3 |
+	rect_map:Reset(0, 0, 0)
+	rect_map:Reset(0, 1, 1)
+	rect_map:Reset(1, 0, 2)
+	rect_map:Reset(1, 1, 3)
+
+	-- left edge
+	if rect_map:Get(-1, 0) ~= 0 then return PW_Status:Error("Expected (-1, 0) => 0") end
+	if rect_map:Get(-1, 1) ~= 1 then return PW_Status:Error("Expected (-1, 1) => 1") end
+	-- right edge
+	if rect_map:Get(2, 0) ~= 2 then return PW_Status:Error("Expected (2, 0) => 2") end
+	if rect_map:Get(2, 1) ~= 3 then return PW_Status:Error("Expected (2, 1) => 3") end
+	-- top edge
+	if rect_map:Get(0, -1) ~= 1 then return PW_Status:Error("Expected (0, -1) => 1") end
+	if rect_map:Get(1, -1) ~= 3 then return PW_Status:Error("Expected (1, -1) => 3") end
+	-- bottom edge
+	if rect_map:Get(0, 2) ~= 0 then return PW_Status:Error("Expected (0, 2) => 0") end
+	if rect_map:Get(1, 2) ~= 2 then return PW_Status:Error("Expected (1, 2) => 2") end
+	-- corners
+	if rect_map:Get(-1, -1) ~= 1 then return PW_Status:Error("Expected (-1, -1) => 1") end
+	if rect_map:Get(-1, 2) ~= 0 then return PW_Status:Error("Expected (-1, 2) => 0") end
+	if rect_map:Get(2, -1) ~= 3 then return PW_Status:Error("Expected (2, -1) => 3") end
+	if rect_map:Get(2, 2) ~= 2 then return PW_Status:Error("Expected (2, 2) => 2") end
+end
+
+function PW_Tests.RectMapTests.TestNoWrap()
+	local WIDTH = 2
+	local HEIGHT = 2
+	local OPTIONS = {
+		default_value = 0,
+		wrap_x = false,
+		wrap_y = false
+	}
+
+	local rect_map = PW_RectMap:New(WIDTH, HEIGHT, OPTIONS)
+	-- | 0, 2 |
+	-- | 1, 3 |
+	rect_map:Reset(0, 0, 0)
+	rect_map:Reset(0, 1, 1)
+	rect_map:Reset(1, 0, 2)
+	rect_map:Reset(1, 1, 3)
+
+	-- left edge
+	if rect_map:Get(-1, 0) ~= 0 then return PW_Status:Error("Expected (-1, 0) => 0") end
+	if rect_map:Get(-1, 1) ~= 1 then return PW_Status:Error("Expected (-1, 1) => 1") end
+	-- right edge
+	if rect_map:Get(2, 0) ~= 2 then return PW_Status:Error("Expected (2, 0) => 2") end
+	if rect_map:Get(2, 1) ~= 3 then return PW_Status:Error("Expected (2, 1) => 3") end
+	-- top edge
+	if rect_map:Get(0, -1) ~= 0 then return PW_Status:Error("Expected (0, -1) => 0") end
+	if rect_map:Get(1, -1) ~= 2 then return PW_Status:Error("Expected (1, -1) => 2") end
+	-- bottom edge
+	if rect_map:Get(0, 2) ~= 1 then return PW_Status:Error("Expected (0, 2) => 1") end
+	if rect_map:Get(1, 2) ~= 3 then return PW_Status:Error("Expected (1, 2) => 3") end
+	-- corners
+	if rect_map:Get(-1, -1) ~= 0 then return PW_Status:Error("Expected (-1, -1) => 0") end
+	if rect_map:Get(-1, 2) ~= 1 then return PW_Status:Error("Expected (-1, 2) => 1") end
+	if rect_map:Get(2, -1) ~= 2 then return PW_Status:Error("Expected (2, -1) => 2") end
+	if rect_map:Get(2, 2) ~= 3 then return PW_Status:Error("Expected (2, 2) => 3") end
 end
 
 -- #############################################################################
