@@ -80,8 +80,8 @@ function GenerateMap()
 
 	-- Set globals
 	g_Width, g_Height = Map.GetGridSize()
-	g_PlotTypesMap = PW_RectMap:New(g_Width, g_Height, { wrap_x = true, wrap_y = true, default_value = g_PLOT_TYPE_NONE })
-	g_TerrainTypesMap = PW_RectMap:New(g_Width, g_Height, { wrap_x = true,  wrap_y = true, default_value = g_TERRAIN_TYPE_NONE })
+	g_PlotTypesMap = PW_RectMap:New(g_Width, g_Height, { wrap_x = true, wrap_y = false, default_value = g_PLOT_TYPE_NONE })
+	g_TerrainTypesMap = PW_RectMap:New(g_Width, g_Height, { wrap_x = true,  wrap_y = false, default_value = g_TERRAIN_TYPE_NONE })
 
 	PW_RandSeed()
 	PWGeneratePlotTypes()
@@ -504,20 +504,57 @@ function PWGenerateTerrainTypes()
 
 	--find exact thresholds
 	-- TODO(omar): Make coast generation less magical.
-	local coastsThreshold = g_ElevationMap:FindThresholdFromPercent(0.4, false, false)
+	local coastsThreshold = g_ElevationMap:FindThresholdFromPercent(0.3, false, false)
 	local desertThreshold = g_RainfallMap:FindThresholdFromPercent(mc.desertPercent,false,true)
 	local plainsThreshold = g_RainfallMap:FindThresholdFromPercent(mc.plainsPercent,false,true)
+
+	PW_Log("Creating coastlines")
+	for y = 0, g_PlotTypesMap:Height() - 1 do
+		for x = 0, g_PlotTypesMap:Width() - 1 do
+			if g_PlotTypesMap:Get(x, y) == g_PLOT_TYPE_OCEAN then
+				if PW_RectMap.Hex(x, y):IsAdjacentTo({g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS, g_PLOT_TYPE_MOUNTAIN}, g_PlotTypesMap) then
+					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_COAST)
+				else
+					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_OCEAN)
+				end
+			end
+		end
+	end
+
+	PW_Log("Expanding coasts")
+	for _ = 1, 2 do
+		local new_coasts = {}
+		for y = 0, g_TerrainTypesMap:Height() - 1 do
+			for x = 0, g_TerrainTypesMap:Width() - 1 do
+				if g_TerrainTypesMap:Get(x, y) == g_TERRAIN_TYPE_OCEAN then
+					local hex = PW_RectMap.Hex(x, y)
+					if g_ElevationMap.data[g_ElevationMap:GetIndex(x, y)] < coastsThreshold and hex:IsAdjacentTo({g_TERRAIN_TYPE_COAST}, g_TerrainTypesMap) then
+						table.insert(new_coasts, hex)
+					end
+				end
+			end
+		end
+
+		for _, hex in ipairs(new_coasts) do
+			g_TerrainTypesMap:Reset(hex.x, hex.y, g_TERRAIN_TYPE_COAST)
+		end
+	end
+	-- Fill in any coastal "holes"
+	for y = 0, g_TerrainTypesMap:Height() - 1 do
+		for x = 0, g_TerrainTypesMap:Width() - 1 do
+			if g_TerrainTypesMap:Get(x, y) == g_TERRAIN_TYPE_OCEAN then
+				local hex = PW_RectMap.Hex(x, y)
+				if hex:CountAdjacent({g_TERRAIN_TYPE_COAST}, g_TerrainTypesMap) == 6 then
+					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_COAST)
+				end
+			end
+		end
+	end
 
 	for i = 0, W * H - 1 do
 		local x, y = g_PlotTypesMap:DeprecatedGetIndexForDataIndex(i)
 		local plot_type = g_PlotTypesMap:Get(x, y)
-		if plot_type == g_PLOT_TYPE_OCEAN then
-			if g_ElevationMap.data[i] < coastsThreshold then
-				g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_OCEAN)
-			else
-				g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_COAST)
-			end
-		else -- Land
+		if plot_type ~= g_PLOT_TYPE_OCEAN then -- Land
 			if g_TemperatureMap.data[i] < mc.snowTemperature then
 				g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_SNOW)
 				table.insert(g_SnowTab,i)
@@ -3653,6 +3690,31 @@ function PW_RectMapHex:Neighbors()
 	end
 
 	return neighbors
+end
+
+function PW_RectMapHex:IsAdjacentTo(values, rect_map)
+	for i, neighbor in ipairs(self:Neighbors()) do
+		for j, value in ipairs(values) do
+			if rect_map:Get(neighbor.x, neighbor.y) == value then
+				return true
+			end
+		end
+	end
+
+	return false
+end
+
+function PW_RectMapHex:CountAdjacent(values, rect_map)
+	local count = 0
+	for i, neighbor in ipairs(self:Neighbors()) do
+		for j, value in ipairs(values) do
+			if rect_map:Get(neighbor.x, neighbor.y) == value then
+				count = count + 1
+			end
+		end
+	end
+
+	return count
 end
 
 --------------------------------------------------------------------------------
