@@ -80,8 +80,8 @@ function GenerateMap()
 
 	-- Set globals
 	g_Width, g_Height = Map.GetGridSize()
-	g_PlotTypesMap = PW_RectMap:New(g_Width, g_Height, true, true, g_PLOT_TYPE_NONE)
-	g_TerrainTypesMap = PW_RectMap:New(g_Width, g_Height, true, true, g_TERRAIN_TYPE_NONE)
+	g_PlotTypesMap = PW_RectMap:New(g_Width, g_Height, { wrap_x = true, wrap_y = true, default_value = g_PLOT_TYPE_NONE })
+	g_TerrainTypesMap = PW_RectMap:New(g_Width, g_Height, { wrap_x = true,  wrap_y = true, default_value = g_TERRAIN_TYPE_NONE })
 
 	PW_RandSeed()
 	PWGeneratePlotTypes()
@@ -3521,32 +3521,169 @@ function PW_RandInt(low, high)
 end
 
 -- #############################################################################
--- PerfectWorld 6 Types
+-- Map Types
 -- #############################################################################
 
-PW_RectMap = {}
+--------------------------------------------------------------------------------
+-- PW_Directions
+--------------------------------------------------------------------------------
 
-function PW_RectMap:New(width, height, wrap_x, wrap_y, default_value)
+PW_DIRECTION_EAST =      "East"
+PW_DIRECTION_NORTHEAST = "Northeast"
+PW_DIRECTION_NORTHWEST = "Northwest"
+PW_DIRECTION_WEST =      "West"
+PW_DIRECTION_SOUTHWEST = "Southwest"
+PW_DIRECTION_SOUTHEAST = "Southeast"
+
+PW_Directions = {
+	PW_DIRECTION_EAST,
+	PW_DIRECTION_NORTHEAST,
+	PW_DIRECTION_NORTHWEST,
+	PW_DIRECTION_WEST,
+	PW_DIRECTION_SOUTHWEST,
+	PW_DIRECTION_SOUTHEAST,
+
+	[PW_DIRECTION_EAST] =      PW_DIRECTION_EAST,
+	[PW_DIRECTION_NORTHEAST] = PW_DIRECTION_NORTHEAST,
+	[PW_DIRECTION_NORTHWEST] = PW_DIRECTION_NORTHWEST,
+	[PW_DIRECTION_WEST] =      PW_DIRECTION_WEST,
+	[PW_DIRECTION_SOUTHWEST] = PW_DIRECTION_SOUTHWEST,
+	[PW_DIRECTION_SOUTHEAST] = PW_DIRECTION_SOUTHEAST,
+}
+
+--------------------------------------------------------------------------------
+-- PW_CubeMapHex
+--------------------------------------------------------------------------------
+
+PW_CubeMap = {}
+PW_CubeMapHex = {}
+
+function PW_CubeMap.Hex(x, y, z)
+	local obj = {}
+	setmetatable(obj, {__index = PW_CubeMapHex})
+
+	obj.x = x
+	obj.y = y
+	obj.z = z
+
+	return obj
+end
+
+function PW_CubeMapHex:ToRect()
+    local x = self.x + (self.z - (self.z % 2)) / 2
+    local y = self.z
+
+    return PW_RectMap.Hex(x, y)
+end
+
+PW_CUBE_DIRECTION_EAST =      PW_CubeMap.Hex( 1, -1,  0)
+PW_CUBE_DIRECTION_NORTHEAST = PW_CubeMap.Hex( 1,  0, -1)
+PW_CUBE_DIRECTION_NORTHWEST = PW_CubeMap.Hex( 0,  1, -1)
+PW_CUBE_DIRECTION_WEST =      PW_CubeMap.Hex(-1,  1,  0)
+PW_CUBE_DIRECTION_SOUTHWEST = PW_CubeMap.Hex(-1,  0,  1)
+PW_CUBE_DIRECTION_SOUTHEAST = PW_CubeMap.Hex( 0, -1,  1)
+
+PW_CubeMapDirections = {
+	PW_CUBE_DIRECTION_EAST,
+	PW_CUBE_DIRECTION_NORTHEAST,
+	PW_CUBE_DIRECTION_NORTHWEST,
+	PW_CUBE_DIRECTION_WEST,
+	PW_CUBE_DIRECTION_SOUTHWEST,
+	PW_CUBE_DIRECTION_SOUTHEAST,
+
+	[PW_DIRECTION_EAST] =      PW_CUBE_DIRECTION_EAST,
+	[PW_DIRECTION_NORTHEAST] = PW_CUBE_DIRECTION_NORTHEAST,
+	[PW_DIRECTION_NORTHWEST] = PW_CUBE_DIRECTION_NORTHWEST,
+	[PW_DIRECTION_WEST] =      PW_CUBE_DIRECTION_WEST,
+	[PW_DIRECTION_SOUTHWEST] = PW_CUBE_DIRECTION_SOUTHWEST,
+	[PW_DIRECTION_SOUTHEAST] = PW_CUBE_DIRECTION_SOUTHEAST,
+}
+
+function PW_AddCubeMapHexes(p1, p2)
+	return PW_CubeMap.Hex(p1.x + p2.x, p1.y + p2.y, p1.z + p2.z)
+end
+
+function PW_CubeMapHex:Neighbor(direction)
+	return PW_AddCubeMapHexes(self, PW_CubeMapDirections[direction])
+end
+
+function PW_CubeMapHex:Neighbors()
+	local neighbors = {}
+
+	for i, dir in ipairs(PW_CubeMapDirections) do
+		table.insert(neighbors, PW_AddCubeMapHexes(self, dir))
+	end
+
+	return neighbors
+end
+
+--------------------------------------------------------------------------------
+-- PW_RectMapHex
+--------------------------------------------------------------------------------
+
+PW_RectMapHex = {}
+
+function PW_RectMapHex:New(x, y)
 	local obj = {}
 	setmetatable(obj, {__index = self})
 
-	obj.matrix_ = PW_Matrix:New(height, width, function() return default_value end)
+	obj.x = x
+	obj.y = y
+
+	return obj
+end
+
+function PW_RectMapHex:ToCube()
+	local x = self.x - (self.y - (self.y % 2)) / 2
+    local z = self.y
+    local y = -x-z
+
+    return PW_CubeMap.Hex(x, y, z)
+end
+
+function PW_RectMapHex:Neighbor(direction)
+	return self:ToCube():Neighbor(direction):ToRect()
+end
+
+function PW_RectMapHex:Neighbors()
+	local neighbors = {}
+
+	for i, neighbor in ipairs(self:ToCube():Neighbors()) do
+		table.insert(neighbors, neighbor:ToRect())
+	end
+
+	return neighbors
+end
+
+--------------------------------------------------------------------------------
+-- PW_RectMap
+--------------------------------------------------------------------------------
+
+PW_RectMap = {}
+
+function PW_RectMap:New(width, height, options)
+	local obj = {}
+	setmetatable(obj, {__index = self})
+
+	options = options or {}
+
+	obj.matrix_ = PW_Matrix:New(height, width, function() return options.default_value end)
 	obj.width_ = width
 	obj.height_ = height
-	obj.default_value_ = default_value
+	obj.default_value_ = options.default_value
 
 	-- Choose the appropriate normalizing function on construction to avoid having
 	-- to check whether to wrap or clamp on every call.
 	local normalized_x = nil
 	local normalized_y = nil
 
-	if wrap_x then
+	if options.wrap_x then
 		normalized_x = function(x) return WrapWithinClosedRange(x, 0, width - 1) end
 	else
 		normalized_x = function(x) return ClampToClosedRange(x, 0, width - 1) end
 	end
 
-	if wrap_y then
+	if options.wrap_y then
 		normalized_y = function(y) return WrapWithinClosedRange(y, 0, height - 1) end
 	else
 		normalized_y = function(y) return ClampToClosedRange(y, 0, height - 1) end
@@ -3573,6 +3710,10 @@ function PW_RectMap:Width()
 	return self.width_
 end
 
+function PW_RectMap.Hex(x, y)
+	return PW_RectMapHex:New(x, y)
+end
+
 function PW_RectMap:Get(x, y)
 	local i, j = self.matrix_index_(x, y)
 	return self.matrix_:Get(i, j)
@@ -3585,12 +3726,87 @@ function PW_RectMap:Reset(x, y, new_value)
 end
 
 function PW_RectMap:FillWith(fill_func)
-	local function matrix_fill_func(x, y)
-		return fill_func(y, x)
+	local function matrix_fill_func(i, j)
+		return fill_func(j, i)
 	end
 
 	self.matrix_:FillWith(matrix_fill_func)
 end
+
+--------------------------------------------------------------------------------
+
+-- Tests for PW_RectMap
+PW_Tests.RectMapTests = {}
+
+function PW_Tests.RectMapTests.TestInitialization()
+	local WIDTH = 4
+	local HEIGHT = 2
+	local OPTIONS = {
+		default_value = 42,
+		wrap_x = true,
+		wrap_y = false
+	}
+
+	local rect_map = PW_RectMap:New(WIDTH, HEIGHT, OPTIONS)
+
+	if rect_map:Width() ~= WIDTH then return PW_Status:Error("Wrong width") end
+	if rect_map:Height() ~= HEIGHT then return PW_Status:Error("Wrong height") end
+
+	for y = 0, rect_map:Height() - 1 do
+		for x = 0, rect_map:Width() - 1 do
+			if rect_map:Get(x, y) ~= OPTIONS.default_value then return PW_Status:Error("Not fully initialized to default value") end
+		end
+	end
+end
+
+function PW_Tests.RectMapTests.TestFill()
+	local WIDTH = 4
+	local HEIGHT = 2
+	local OPTIONS = {
+		default_value = 42,
+		wrap_x = true,
+		wrap_y = false
+	}
+
+	local rect_map = PW_RectMap:New(WIDTH, HEIGHT, OPTIONS)
+
+	local function fill(x, y)
+		return (x + 1) * (y + 1) ^ 2
+	end
+
+	rect_map:FillWith(fill)
+
+	for y = 0, rect_map:Height() - 1 do
+		for x = 0, rect_map:Width() - 1 do
+			PW_Log("" ..  rect_map:Get(x, y))
+			if rect_map:Get(x, y) ~= fill(x, y) then return PW_Status:Error("Not filled properly") end
+		end
+	end
+end
+
+function PW_Tests.RectMapTests.TestReset()
+	local WIDTH = 4
+	local HEIGHT = 2
+	local OPTIONS = {
+		default_value = 42,
+		wrap_x = true,
+		wrap_y = false
+	}
+
+	local rect_map = PW_RectMap:New(WIDTH, HEIGHT, OPTIONS)
+
+	if rect_map:Get(0, 1) ~= OPTIONS.default_value then return PW_Status:Error("Value not set to default value") end
+
+	rect_map:Reset(0, 1, 13)
+	if rect_map:Get(0, 1) ~= 13 then return PW_Status:Error("Value not updated to expected value") end
+
+	rect_map:Reset(0, 1)
+	if rect_map:Get(0, 1) ~= OPTIONS.default_value then return PW_Status:Error("Value not reset to default value") end
+end
+
+-- #############################################################################
+-- Basic Types
+-- #############################################################################
 
 -------------------------------------------------------------------------------
 -- PW_Matrix
@@ -3611,7 +3827,7 @@ function PW_Matrix:New(rows, cols, fill_func)
 	obj.rows_ = rows
 	obj.cols_ = cols
 	obj.data_ = {}
-	obj.index_ = function(i, j) return 1 + i * obj.rows_ + j end
+	obj.index_ = function(i, j) return 1 + i * obj.cols_ + j end
 
 	if fill_func then
 		for i = 0, rows - 1 do
@@ -3691,9 +3907,11 @@ function PW_Tests.MatrixTests.TestInitialization()
 end
 
 function PW_Tests.MatrixTests.TestFillWith()
-	local matrix = PW_Matrix:New(3, 3)
+	local ROWS = 2
+	local COLS = 4
+	local matrix = PW_Matrix:New(ROWS, COLS)
 
-	function fill(i, j)
+	local function fill(i, j)
 		return (i + 1) * (j + 1) ^ 2
 	end
 
