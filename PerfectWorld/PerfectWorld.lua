@@ -3565,6 +3565,7 @@ end
 -- PW_Directions
 --------------------------------------------------------------------------------
 
+-- Direction constants for a hexagonal grid.
 PW_DIRECTION_EAST =      "East"
 PW_DIRECTION_NORTHEAST = "Northeast"
 PW_DIRECTION_NORTHWEST = "Northwest"
@@ -3572,6 +3573,8 @@ PW_DIRECTION_WEST =      "West"
 PW_DIRECTION_SOUTHWEST = "Southwest"
 PW_DIRECTION_SOUTHEAST = "Southeast"
 
+-- Enumerates the directions for iteration.
+-- The enumeration is in counterclockwise order, starting with East.
 PW_Directions = {
 	PW_DIRECTION_EAST,
 	PW_DIRECTION_NORTHEAST,
@@ -3580,6 +3583,8 @@ PW_Directions = {
 	PW_DIRECTION_SOUTHWEST,
 	PW_DIRECTION_SOUTHEAST,
 
+	-- This is API candy.
+	-- Makes it possible to spell `PW_DIRECTION_EAST` as `PW_Directions.East`.
 	[PW_DIRECTION_EAST] =      PW_DIRECTION_EAST,
 	[PW_DIRECTION_NORTHEAST] = PW_DIRECTION_NORTHEAST,
 	[PW_DIRECTION_NORTHWEST] = PW_DIRECTION_NORTHWEST,
@@ -3590,14 +3595,32 @@ PW_Directions = {
 
 --------------------------------------------------------------------------------
 -- PW_CubeMapHex
---------------------------------------------------------------------------------
-
-PW_CubeMap = {}
+-- Represents a location on a hexagonal grid/map using cube coordinates.
+--
+-- Algorihms on hexagonal grids are efficiently implemented in cube coordinates,
+-- which are vectors. Amit Patel wrote an excellent article on the subject:
+-- https://www.redblobgames.com/grids/hexagons/#coordinates
+-- A right-handed coordinate system is assumed instead of the left-handed one
+-- described in the above, since that's what Civilization 6 uses.
+--
+--    Orientation      |    Cube coordinates for a hexagonal grid
+--                     |
+--    \+y              |          (-1, 1, 0)  ( 0, 1,-1)
+--     \               |
+--      \_______+x     |    (-1, 0, 1)  ( 0, 0, 0)  ( 1, 0,-1)
+--      /              |
+--     /               |          ( 0,-1, 1)  ( 1,-1, 0)
+--    /+z              |
+---------------------------------------------------------------------------------
 PW_CubeMapHex = {}
 
-function PW_CubeMap.Hex(x, y, z)
+-- Hexagonal coordinates aren't stored directly. PW_CubeMap is defined simply
+-- to provide a bit of API candy.
+PW_CubeMap = {}
+
+function PW_CubeMapHex:New(x, y, z)
 	local obj = {}
-	setmetatable(obj, {__index = PW_CubeMapHex})
+	setmetatable(obj, {__index = self})
 
 	obj.x = x
 	obj.y = y
@@ -3606,48 +3629,65 @@ function PW_CubeMap.Hex(x, y, z)
 	return obj
 end
 
+-- Another way to spell `PW_CubeMapHex:New`.
+function PW_CubeMap.Hex(x, y, z)
+	return PW_CubeMapHex:New(x, y, z)
+end
+
+-- Converts from cube coordinates to offset rectangular coordinates, A.K.A. Civ 6 coordinates.
 function PW_CubeMapHex:ToRect()
-    local x = self.x + (self.z - (self.z % 2)) / 2
-    local y = self.z
+    local x = self.x + (self.y - (self.y % 2)) / 2
+    local y = self.y
 
     return PW_RectMap.Hex(x, y)
 end
 
-PW_CUBE_DIRECTION_EAST =      PW_CubeMap.Hex( 1, -1,  0)
-PW_CUBE_DIRECTION_NORTHEAST = PW_CubeMap.Hex( 1,  0, -1)
-PW_CUBE_DIRECTION_NORTHWEST = PW_CubeMap.Hex( 0,  1, -1)
-PW_CUBE_DIRECTION_WEST =      PW_CubeMap.Hex(-1,  1,  0)
-PW_CUBE_DIRECTION_SOUTHWEST = PW_CubeMap.Hex(-1,  0,  1)
-PW_CUBE_DIRECTION_SOUTHEAST = PW_CubeMap.Hex( 0, -1,  1)
+-- Adds cube coordinates vectors.
+function PW_AddCubeMapHexes(u, v)
+	return PW_CubeMap.Hex(u.x + v.x, u.y + v.y, u.z + v.z)
+end
 
-PW_CubeMapDirections = {
-	PW_CUBE_DIRECTION_EAST,
-	PW_CUBE_DIRECTION_NORTHEAST,
-	PW_CUBE_DIRECTION_NORTHWEST,
-	PW_CUBE_DIRECTION_WEST,
-	PW_CUBE_DIRECTION_SOUTHWEST,
-	PW_CUBE_DIRECTION_SOUTHEAST,
+-- Scales a cube coordinate vector.
+function PW_ScaleCubeMapHex(scalar, v)
+	return PW_CubeMap.Hex(scalar * v.x, scalar * v.y, scalar * v.z)
+end
 
-	[PW_DIRECTION_EAST] =      PW_CUBE_DIRECTION_EAST,
-	[PW_DIRECTION_NORTHEAST] = PW_CUBE_DIRECTION_NORTHEAST,
-	[PW_DIRECTION_NORTHWEST] = PW_CUBE_DIRECTION_NORTHWEST,
-	[PW_DIRECTION_WEST] =      PW_CUBE_DIRECTION_WEST,
-	[PW_DIRECTION_SOUTHWEST] = PW_CUBE_DIRECTION_SOUTHWEST,
-	[PW_DIRECTION_SOUTHEAST] = PW_CUBE_DIRECTION_SOUTHEAST,
+-- Direction vector constants for a hexagonal grid.
+PW_CUBE_DIRECTION_VECTOR_EAST =      PW_CubeMap.Hex( 1,  0, -1)
+PW_CUBE_DIRECTION_VECTOR_NORTHEAST = PW_CubeMap.Hex( 0,  1, -1)
+PW_CUBE_DIRECTION_VECTOR_NORTHWEST = PW_CubeMap.Hex(-1,  1,  0)
+PW_CUBE_DIRECTION_VECTOR_WEST =      PW_CubeMap.Hex(-1,  0,  1)
+PW_CUBE_DIRECTION_VECTOR_SOUTHWEST = PW_CubeMap.Hex( 0, -1,  1)
+PW_CUBE_DIRECTION_VECTOR_SOUTHEAST = PW_CubeMap.Hex( 1, -1,  0)
+
+-- Enumerates the direction vectors for iteration and name-based lookup.
+-- The enumeration is in counterclockwise order, starting with East.
+PW_CubeMapDirectionVectors = {
+	PW_CUBE_DIRECTION_VECTOR_EAST,
+	PW_CUBE_DIRECTION_VECTOR_NORTHEAST,
+	PW_CUBE_DIRECTION_VECTOR_NORTHWEST,
+	PW_CUBE_DIRECTION_VECTOR_WEST,
+	PW_CUBE_DIRECTION_VECTOR_SOUTHWEST,
+	PW_CUBE_DIRECTION_VECTOR_SOUTHEAST,
+
+	[PW_DIRECTION_EAST] =      PW_CUBE_DIRECTION_VECTOR_EAST,
+	[PW_DIRECTION_NORTHEAST] = PW_CUBE_DIRECTION_VECTOR_NORTHEAST,
+	[PW_DIRECTION_NORTHWEST] = PW_CUBE_DIRECTION_VECTOR_NORTHWEST,
+	[PW_DIRECTION_WEST] =      PW_CUBE_DIRECTION_VECTOR_WEST,
+	[PW_DIRECTION_SOUTHWEST] = PW_CUBE_DIRECTION_VECTOR_SOUTHWEST,
+	[PW_DIRECTION_SOUTHEAST] = PW_CUBE_DIRECTION_VECTOR_SOUTHEAST,
 }
 
-function PW_AddCubeMapHexes(p1, p2)
-	return PW_CubeMap.Hex(p1.x + p2.x, p1.y + p2.y, p1.z + p2.z)
-end
-
+-- Returns the cube coordinates of a neighboring hex.
 function PW_CubeMapHex:Neighbor(direction)
-	return PW_AddCubeMapHexes(self, PW_CubeMapDirections[direction])
+	return PW_AddCubeMapHexes(self, PW_CubeMapDirectionVectors[direction])
 end
 
+-- Returns the cube coordinates of the neighboring hexes.
 function PW_CubeMapHex:Neighbors()
 	local neighbors = {}
 
-	for i, dir in ipairs(PW_CubeMapDirections) do
+	for _, dir in ipairs(PW_CubeMapDirectionVectors) do
 		table.insert(neighbors, PW_AddCubeMapHexes(self, dir))
 	end
 
@@ -3656,8 +3696,27 @@ end
 
 --------------------------------------------------------------------------------
 -- PW_RectMapHex
+-- Represents a location on a hexagonal grid/map using offset rectangular
+-- coordinates. This is the same coordinate system used by Civilization 6.
+--
+-- Amit Patel wrote an excellent article about hexagonal grids:
+-- https://www.redblobgames.com/grids/hexagons/#coordinates
+-- A right-handed coordinate system is assumed instead of the left-handed one
+-- described in the above, since that's what Civilization 6 uses.
+--
+--    Orientation      |    Offset rectangular coordinates for a hexagonal grid
+--                     |
+--                     |            (-1, 2) ( 0, 2) ( 1, 2)
+--                     |
+--     |+y             |        (-2, 1) (-1, 1) ( 0, 1) ( 1, 1)
+--     |               |
+--     |               |    (-2, 0) (-1, 0) ( 0, 0) ( 1, 0) ( 2, 0)
+--     |               |
+--     |_________+x    |        (-2,-1) (-1,-1) ( 0,-1) ( 1,-1)
+--                     |
+--                     |            (-1,-2) ( 0,-2) ( 1,-2)
+--                     |
 --------------------------------------------------------------------------------
-
 PW_RectMapHex = {}
 
 function PW_RectMapHex:New(x, y)
@@ -3670,31 +3729,35 @@ function PW_RectMapHex:New(x, y)
 	return obj
 end
 
+-- Converts to cube coordinates.
 function PW_RectMapHex:ToCube()
 	local x = self.x - (self.y - (self.y % 2)) / 2
-    local z = self.y
-    local y = -x-z
+    local y = self.y
+    local z = -x-y
 
     return PW_CubeMap.Hex(x, y, z)
 end
 
+-- Returns the coordinates of a neighboring hex.
 function PW_RectMapHex:Neighbor(direction)
 	return self:ToCube():Neighbor(direction):ToRect()
 end
 
+-- Returns the coordinates of the neighboring hexes.
 function PW_RectMapHex:Neighbors()
 	local neighbors = {}
 
-	for i, neighbor in ipairs(self:ToCube():Neighbors()) do
+	for _, neighbor in ipairs(self:ToCube():Neighbors()) do
 		table.insert(neighbors, neighbor:ToRect())
 	end
 
 	return neighbors
 end
 
+-- Whether any of values are present in the neighboring hexes.
 function PW_RectMapHex:IsAdjacentTo(values, rect_map)
-	for i, neighbor in ipairs(self:Neighbors()) do
-		for j, value in ipairs(values) do
+	for _, neighbor in ipairs(self:Neighbors()) do
+		for _, value in ipairs(values) do
 			if rect_map:Get(neighbor.x, neighbor.y) == value then
 				return true
 			end
@@ -3704,10 +3767,11 @@ function PW_RectMapHex:IsAdjacentTo(values, rect_map)
 	return false
 end
 
+-- The number of neighboring hexes where any of the values are present.
 function PW_RectMapHex:CountAdjacent(values, rect_map)
 	local count = 0
-	for i, neighbor in ipairs(self:Neighbors()) do
-		for j, value in ipairs(values) do
+	for _, neighbor in ipairs(self:Neighbors()) do
+		for _, value in ipairs(values) do
 			if rect_map:Get(neighbor.x, neighbor.y) == value then
 				count = count + 1
 			end
@@ -3720,7 +3784,6 @@ end
 --------------------------------------------------------------------------------
 -- PW_RectMap
 --------------------------------------------------------------------------------
-
 PW_RectMap = {}
 
 function PW_RectMap:New(width, height, options)
