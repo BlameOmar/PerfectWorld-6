@@ -388,14 +388,14 @@ function ApplyTerrainToPlot(plot, plot_type, terrain_type)
 end
 
 function ApplyTerrain(plotTypes, terrainTypes)
-	for i = 0, (g_Width * g_Height) - 1, 1 do
-		local pPlot = Map.GetPlotByIndex(i);
-		local x, y = g_PlotTypesMap:DeprecatedGetIndexForDataIndex(i)
+	for y = 0, g_Height - 1 do
+		for x = 0, g_Width - 1 do
+			local plot = Map.GetPlot(x, y)
+			local plot_type = g_PlotTypesMap:Get(x, y)
+			local terrain_type = g_TerrainTypesMap:Get(x, y)
 
-		local plot_type = g_PlotTypesMap:Get(x, y)
-		local terrain_type = g_TerrainTypesMap:Get(x, y)
-
-		ApplyTerrainToPlot(pPlot, plot_type, terrain_type)
+			ApplyTerrainToPlot(plot, plot_type, terrain_type)
+		end
 	end
 end
 
