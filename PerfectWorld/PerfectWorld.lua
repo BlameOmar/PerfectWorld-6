@@ -423,55 +423,45 @@ function PWGeneratePlotTypes()
 	PW_Log("Generating plot types")
 	ShiftMaps();
 
+	-- (omar): this identifier has some weird scoping issues.
 	DiffMap = GenerateDiffMap(W,H,true,false);
 
 	--find exact thresholds
-	local hillsThreshold = DiffMap:FindThresholdFromPercent(mc.hillsPercent,false,true)
-	local mountainsThreshold = DiffMap:FindThresholdFromPercent(mc.mountainsPercent,false,true)
-	local mountainTab = {}
+	local hills_threshold = DiffMap:FindThresholdFromPercent(mc.hillsPercent,false,true)
+	local mountains_threshold = DiffMap:FindThresholdFromPercent(mc.mountainsPercent,false,true)
+	local mountain_hexes = {}
 	local i = 0
 	for y = 0, H - 1,1 do
 		for x = 0,W - 1,1 do
 			if g_ElevationMap:IsBelowSeaLevel(x,y) then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_OCEAN)
-			elseif DiffMap.data[i] < hillsThreshold then
+			elseif DiffMap.data[i] < hills_threshold then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_LAND)
 				table.insert(g_LandTab,i)
-			elseif DiffMap.data[i] < mountainsThreshold then
+			elseif DiffMap.data[i] < mountains_threshold then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_HILLS)
 				table.insert(g_LandTab,i)
 			else
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_MOUNTAIN)
 				table.insert(g_LandTab,i)
-				table.insert(mountainTab,i)
+				table.insert(mountain_hexes, PW_RectMap.Hex(x, y))
 			end
 			i=i+1
 		end
 	end
 
-	-- Gets rid of single tile mountains in the oceans. -- Bobert13
-	for k = 1,#mountainTab,1 do
-		local i = mountainTab[k]
-		local tiles = GetSpiral(i,1)
-		local landCount = 0
-		for n=1,#tiles do
-			local ii = tiles[n]
-			if ii~= -1 then
-				local x, y = g_PlotTypesMap:DeprecatedGetIndexForDataIndex(ii)
-				local plot_type = g_PlotTypesMap:Get(x, y)
-				if plot_type == g_PLOT_TYPE_HILLS or plot_type == g_PLOT_TYPE_LAND then
-					landCount = landCount + 1
-				end
-			end
+	-- Gets rid of mountains that border the ocean but aren't next to flatter land.
+	local mountains_to_erode = {}
+	for _, hex in ipairs(mountain_hexes) do
+		if not hex:IsAdjacentTo({g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS}, g_PlotTypesMap) and hex:IsAdjacentTo({g_PLOT_TYPE_OCEAN}, g_PlotTypesMap) then
+			table.insert(mountains_to_erode, hex)
 		end
-		if landCount == 0 then
-			local roll1 = PW_RandInt(1,3)
-			local x, y = g_PlotTypesMap:DeprecatedGetIndexForDataIndex(i)
-			if roll1 == 1 then
-				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_LAND)
-			else
-				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_HILLS)
-			end
+	end
+	for _, hex in ipairs(mountains_to_erode) do
+		if PW_RandInt(1,3) == 1 then
+			g_PlotTypesMap:Reset(hex.x, hex.y, g_PLOT_TYPE_LAND)
+		else
+			g_PlotTypesMap:Reset(hex.x, hex.y, g_PLOT_TYPE_HILLS)
 		end
 	end
 	
@@ -482,9 +472,6 @@ function PWGeneratePlotTypes()
 	g_RiverMap:SiltifyLakes()
 	g_RiverMap:SetFlowDestinations()
 	g_RiverMap:SetRiverSizes(g_RainfallMap)
-
-	-- I'm not sure where this is defined yet.
-	-- GenerateCoasts();
 end
 
 function PWGenerateTerrainTypes()
@@ -3635,13 +3622,15 @@ function PW_CubeMapHex:ToRect()
 end
 
 -- Adds cube coordinates vectors.
+-- u, v: cube coordinate vectors.
 function PW_AddCubeMapHexes(u, v)
 	return PW_CubeMap.Hex(u.x + v.x, u.y + v.y, u.z + v.z)
 end
 
 -- Scales a cube coordinate vector.
-function PW_ScaleCubeMapHex(scalar, v)
-	return PW_CubeMap.Hex(scalar * v.x, scalar * v.y, scalar * v.z)
+-- scalar: the amount by which to scale the cube coordinate vector.
+function PW_CubeMapHex:Scale(scalar)
+	return PW_CubeMap.Hex(scalar * self.x, scalar * self.y, scalar * self.z)
 end
 
 -- Direction vector constants for a hexagonal grid.
@@ -3671,6 +3660,7 @@ PW_CubeMapDirectionVectors = {
 }
 
 -- Returns the cube coordinates of a neighboring hex.
+-- direction: the relative direction (one of PW_Directions) of the neigboring hex.
 function PW_CubeMapHex:Neighbor(direction)
 	return PW_AddCubeMapHexes(self, PW_CubeMapDirectionVectors[direction])
 end
@@ -3684,6 +3674,44 @@ function PW_CubeMapHex:Neighbors()
 	end
 
 	return neighbors
+end
+
+-- Returns the cube coordinates of hexes forming a ring.
+-- radius: the radius of the ring.
+function PW_CubeMapHex:Ring(radius)
+	if radius < 0 then return {} end
+	if radius == 0 then return { self } end
+
+	local hexes = {}
+
+	-- With an initial heading of `East`, trace the ring in a counterclockwise direction.
+	--      ____
+	--     /    \
+	--    /      \
+	--    \  /r  /
+	--     \/___/
+	--     X---->
+	--
+	local hex = PW_AddCubeMapHexes(self, PW_CubeMapDirectionVectors.Southwest:Scale(radius))
+	for _, dir in ipairs(PW_Directions) do
+		for _ = 1, radius do
+			table.insert(hexes, hex)
+			hex = hex:Neighbor(dir)
+		end
+	end
+
+	return hexes
+end
+
+-- Returns the cube coordinates of hexes forming concentric rings.
+-- radius: the radius of the largest ring.
+function PW_CubeMapHex:Spiral(radius)
+	local hexes = {}
+	for r = 0, radius do
+		Array.AppendArray(hexes, self:Ring(r))
+	end
+
+	return hexes
 end
 
 --------------------------------------------------------------------------------
@@ -3731,42 +3759,45 @@ function PW_RectMapHex:ToCube()
 end
 
 -- Returns the coordinates of a neighboring hex.
+-- direction: the relative direction (one of PW_Directions) of the neigboring hex.
 function PW_RectMapHex:Neighbor(direction)
 	return self:ToCube():Neighbor(direction):ToRect()
 end
 
 -- Returns the coordinates of the neighboring hexes.
 function PW_RectMapHex:Neighbors()
-	local neighbors = {}
-
-	for _, neighbor in ipairs(self:ToCube():Neighbors()) do
-		table.insert(neighbors, neighbor:ToRect())
-	end
-
-	return neighbors
+	return Array.Map(self:ToCube():Neighbors(), PW_CubeMapHex.ToRect)
 end
 
--- Whether any of values are present in the neighboring hexes.
+-- Returns the coordinates of hexes forming a ring.
+-- radius: the radius of the ring.
+function PW_RectMapHex:Ring(radius)
+	return Array.Map(self:ToCube():Ring(radius), PW_CubeMapHex.ToRect)
+end
+
+-- Returns the coordinates of hexes forming concentric rings.
+-- radius: the radius of the largest ring.
+function PW_RectMapHex:Spiral(radius)
+	return Array.Map(self:ToCube():Spiral(radius), PW_CubeMapHex.ToRect)
+end
+
+-- Returns whether any of values are present in the neighboring hexes.
 function PW_RectMapHex:IsAdjacentTo(values, rect_map)
 	for _, neighbor in ipairs(self:Neighbors()) do
-		for _, value in ipairs(values) do
-			if rect_map:Get(neighbor.x, neighbor.y) == value then
-				return true
-			end
+		if Array.Contains(values, rect_map:Get(neighbor.x, neighbor.y)) then
+			return true
 		end
 	end
 
 	return false
 end
 
--- The number of neighboring hexes where any of the values are present.
+-- Returns the number of neighboring hexes where any of the values are present.
 function PW_RectMapHex:CountAdjacent(values, rect_map)
 	local count = 0
 	for _, neighbor in ipairs(self:Neighbors()) do
-		for _, value in ipairs(values) do
-			if rect_map:Get(neighbor.x, neighbor.y) == value then
-				count = count + 1
-			end
+		if Array.Contains(values, rect_map:Get(neighbor.x, neighbor.y)) then
+			count = count + 1
 		end
 	end
 
@@ -4257,6 +4288,35 @@ function PW_Tests.MathTests.TestClampToClosedRange()
 	if ClampToClosedRange(11, 0, 10) ~= 10 then return PW_Status:Error() end
 	if ClampToClosedRange("alligator", "b", "d") ~= "b" then return PW_Status:Error() end
 	if ClampToClosedRange("dog", "b", "d") ~= "d" then return PW_Status:Error() end
+end
+
+-- #############################################################################
+-- Array Utils
+-- #############################################################################
+
+Array = {}
+
+function Array.Contains(array, value)
+	for _, array_value in ipairs(array) do
+		if array_value == value then return true end
+	end
+
+	return false
+end
+
+function Array.Map(array, map_func)
+	local new_array = {}
+	for i, value in ipairs(array) do
+		new_array[i] = map_func(value)
+	end
+
+	return new_array
+end
+
+function Array.AppendArray(destination_array, other_array)
+	for _, value in ipairs(other_array) do
+		table.insert(destination_array, value)
+	end
 end
 
 -- #############################################################################
