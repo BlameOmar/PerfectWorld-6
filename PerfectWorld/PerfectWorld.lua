@@ -3730,6 +3730,10 @@ function PW_RectMapHex:CountAdjacent(values, rect_map)
 	return count
 end
 
+function PW_RectMapHex:IsOnMap(rect_map)
+	return rect_map:HexExistsAt(self.x, self.y)
+end
+
 --------------------------------------------------------------------------------
 -- PW_RectMap
 --------------------------------------------------------------------------------
@@ -3745,6 +3749,8 @@ function PW_RectMap:New(width, height, options)
 	obj.width_ = width
 	obj.height_ = height
 	obj.default_value_ = options.default_value
+	obj.wrap_x_ = options.wrap_x
+	obj.wrap_y_ = options.wrap_y
 
 	-- Choose the appropriate normalizing function on construction to avoid having
 	-- to check whether to wrap or clamp on every call.
@@ -3782,6 +3788,18 @@ end
 
 function PW_RectMap:Width()
 	return self.width_
+end
+
+function PW_RectMap:WrapX()
+	return self.wrap_x_
+end
+
+function PW_RectMap:WrapY()
+	return self.wrap_y_
+end
+
+function PW_RectMap:HexExistsAt(x, y)
+	return (0 <= x and x < self:Width() or self:WrapX()) and (0 <= y and y < self:Width() or self:WrapY())
 end
 
 function PW_RectMap.Hex(x, y)
@@ -4216,6 +4234,40 @@ function PW_Tests.MathTests.TestClampToClosedRange()
 	if ClampToClosedRange("dog", "b", "d") ~= "d" then return PW_Status:Error() end
 end
 
+--------------------------------------------------------------------------------
+
+function Sum(array)
+	return Array.Reduce(array, 0, function(x, y) return x + y end)
+end
+
+function PW_Tests.MathTests.TestSum()
+	if Sum({1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) ~= 55 then return PW_Status:Error() end
+	if Sum({-1, 2, -3, 4, -5, 6, -7, 8, -9, 10}) ~= 5 then return PW_Status:Error() end
+end
+
+--------------------------------------------------------------------------------
+
+function ArithmeticMean(array)
+	return Sum(array) / #array
+end
+
+function PW_Tests.MathTests.ArithmeticMean()
+	if ArithmeticMean({1, 2, 3, 4, 5, 6, 7, 8, 9, 10}) ~= 5.5 then return PW_Status:Error() end
+	if ArithmeticMean({-1, 2, -3, 4, -5, 6, -7, 8, -9, 10}) ~= 0.5 then return PW_Status:Error() end
+end
+
+--------------------------------------------------------------------------------
+
+function Variance(array)
+	-- Save some CPU cycles by computing this once, outside the closure.
+	local mean = ArithmeticMean(array)
+	return ArithmeticMean(Array.Map(array, function(x) return (x - mean)^2 end))
+end
+
+function StandardDeviation(array)
+	return math.sqrt(Variance(array))
+end
+
 -- #############################################################################
 -- Array Utils
 -- #############################################################################
@@ -4230,13 +4282,33 @@ function Array.Contains(array, value)
 	return false
 end
 
-function Array.Map(array, map_func)
+function Array.Filter(array, predicate)
 	local new_array = {}
-	for i, value in ipairs(array) do
-		new_array[i] = map_func(value)
+	for _, value in ipairs(array) do
+		if predicate(value) then
+			table.insert(new_array, value)
+		end
 	end
 
 	return new_array
+end
+
+function Array.Map(array, map_func)
+	local new_array = {}
+	for i, value in ipairs(array) do
+		table.insert(new_array, map_func(value))
+	end
+
+	return new_array
+end
+
+function Array.Reduce(array, initial_value, accumulator)
+	local ret = initial_value
+	for _, value in ipairs(array) do
+		ret = accumulator(ret, value)
+	end
+
+	return ret
 end
 
 function Array.AppendArray(destination_array, other_array)
