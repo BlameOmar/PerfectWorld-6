@@ -570,9 +570,13 @@ function PWGenerateTerrainTypes()
 		end
 	end
 end
------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
+function LatitudeAtY(y)
+	return (y / (g_Height - 1)) * (mc.topLatitude - mc.bottomLatitude) + mc.bottomLatitude
+end
+--------------------------------------------------------------------------------
 --Interpolation and Perlin functions
------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 function CubicInterpolate(v0,v1,v2,v3,mu)
 	local mu2 = mu * mu
 	local a0 = v3 - v2 - v0 + v1
@@ -967,30 +971,8 @@ function FloatMap:FindThresholdFromPercent(percent, greaterThan, excludeZeros)
 	return mapList[threshIndex-1]+const
 end
 -------------------------------------------------------------------------------------------
-function FloatMap:GetLatitudeForY(y)
-	local range = mc.topLatitude - mc.bottomLatitude
-	local lat = nil
-	if y < self.height/2 then
-		lat = (y+1) / self.height * range + (mc.bottomLatitude - mc.topLatitude / self.height)
-	else
-		lat = y / self.height * range + (mc.bottomLatitude + mc.topLatitude / self.height)
-	end
-	return lat
-end
--------------------------------------------------------------------------------------------
-function FloatMap:GetYForLatitude(lat)
-	local range = mc.topLatitude - mc.bottomLatitude
-	local y = nil
-	if lat < 0 then
-		y = math.floor(((lat - (mc.bottomLatitude - mc.topLatitude / self.height)) / range * self.height))
-	else
-		y = math.ceil(((lat - (mc.bottomLatitude + mc.topLatitude / self.height)) / range * self.height) - 1)
-	end
-	return y
-end
--------------------------------------------------------------------------------------------
 function FloatMap:GetZone(y)
-	local lat = self:GetLatitudeForY(y)
+	local lat = LatitudeAtY(y)
 	if y < 0 or y >= self.height then
 		return mc.NOZONE
 	end
@@ -2319,7 +2301,7 @@ function GenerateTempMaps(elevation_map)
 	i = 0
 	for y = 0,elevation_map.height - 1,1 do
 		for x = 0,elevation_map.width - 1,1 do
-			local lat = summerMap:GetLatitudeForY(y)
+			local lat = LatitudeAtY(y)
 			--print("y=" .. y ..",lat=" .. lat)
 			local latPercent = (lat - bottomTempLat)/latRange
 			--print("latPercent=" .. latPercent)
@@ -2342,7 +2324,7 @@ function GenerateTempMaps(elevation_map)
 	i = 0
 	for y = 0,elevation_map.height - 1,1 do
 		for x = 0,elevation_map.width - 1,1 do
-			local lat = winterMap:GetLatitudeForY(y)
+			local lat = LatitudeAtY(y)
 			local latPercent = (lat - bottomTempLat)/latRange
 			local temp = math.sin(latPercent * math.pi * 2 - math.pi * 0.5) * 0.5 + 0.5
 			if elevation_map:IsBelowSeaLevel(x,y) then
@@ -2375,7 +2357,7 @@ function GenerateRainfallMap(elevation_map)
 	local i = 0
 	for y = 0,elevation_map.height - 1,1 do
 		for x = 0,elevation_map.width - 1,1 do
-			local lat = elevation_map:GetLatitudeForY(y)
+			local lat = LatitudeAtY(y)
 			local pressure = elevation_map:GetGeostrophicPressure(lat)
 			geoMap.data[i] = pressure
 			--print(string.format("pressure for (%d,%d) is %.8f",x,y,pressure))
@@ -2698,7 +2680,7 @@ function PlacePossibleIce(i,W)
 	local y = (i-x)/W
 	if plot:IsWater() then
 		local temp = g_TemperatureMap.data[i]
-		local latitude = g_TemperatureMap:GetLatitudeForY(y)
+		local latitude = LatitudeAtY(y)
 		--local randval = PW_Rand() * (mc.iceMaxTemperature - mc.minWaterTemp) + mc.minWaterTemp * 2
 		local randvalNorth = PW_Rand() * (mc.iceNorthLatitudeLimit - mc.topLatitude) + mc.topLatitude - 3
 		local randvalSouth = PW_Rand() * (mc.bottomLatitude - mc.iceSouthLatitudeLimit) + mc.iceSouthLatitudeLimit + 3
@@ -2967,7 +2949,7 @@ function Cleanup()
 					snowCount = snowCount + 1
 				end
 			end
-			if snowCount == 1 or grassCount == 2 or (g_ElevationMap:GetLatitudeForY(y) < (mc.iceNorthLatitudeLimit - H/5) and g_ElevationMap:GetLatitudeForY(y) > (mc.iceSouthLatitudeLimit + H/5)) then
+			if snowCount == 1 or grassCount == 2 or (LatitudeAtY(y) < (mc.iceNorthLatitudeLimit - H/5) and LatitudeAtY(y) > (mc.iceSouthLatitudeLimit + H/5)) then
 				plot:SetTerrainType(terrainTundra,true,true)
 				table.insert(g_TundraTab,i)
 				table.remove(g_SnowTab,k)
