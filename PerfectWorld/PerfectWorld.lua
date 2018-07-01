@@ -755,14 +755,6 @@ function GetPerlinDerivative(x,y,destMapWidth,destMapHeight,initialFrequency,ini
 	finalValue = finalValue/octaves
 	return finalValue
 end
--------------------------------------------------------------------------------------------
-function Push(a,item)
-	table.insert(a,item)
-end
--------------------------------------------------------------------------------------------
-function Pop(a)
-	return table.remove(a)
-end
 ------------------------------------------------------------------------
 --inheritance mechanism from http://www.gamedev.net/community/forums/topic.asp?topic_id=561909
 ------------------------------------------------------------------------
