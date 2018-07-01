@@ -423,22 +423,21 @@ function PWGeneratePlotTypes()
 	PW_Log("Generating plot types")
 	ShiftMaps();
 
-	-- (omar): this identifier has some weird scoping issues.
-	DiffMap = GenerateDiffMap(W,H,true,false);
+	g_DiffMap = GenerateDiffMap(W,H,true,false);
 
 	--find exact thresholds
-	local hills_threshold = DiffMap:FindThresholdFromPercent(mc.hillsPercent,false,true)
-	local mountains_threshold = DiffMap:FindThresholdFromPercent(mc.mountainsPercent,false,true)
+	local hills_threshold = g_DiffMap:FindThresholdFromPercent(mc.hillsPercent,false,true)
+	local mountains_threshold = g_DiffMap:FindThresholdFromPercent(mc.mountainsPercent,false,true)
 	local mountain_hexes = {}
 	local i = 0
 	for y = 0, H - 1,1 do
 		for x = 0,W - 1,1 do
 			if g_ElevationMap:IsBelowSeaLevel(x,y) then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_OCEAN)
-			elseif DiffMap.data[i] < hills_threshold then
+			elseif g_DiffMap.data[i] < hills_threshold then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_LAND)
 				table.insert(g_LandTab,i)
-			elseif DiffMap.data[i] < mountains_threshold then
+			elseif g_DiffMap.data[i] < mountains_threshold then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_HILLS)
 				table.insert(g_LandTab,i)
 			else
@@ -742,65 +741,6 @@ function GetPerlinDerivative(x,y,destMapWidth,destMapHeight,initialFrequency,ini
 	finalValue = finalValue/octaves
 	return finalValue
 end
-------------------------------------------------------------------------
---inheritance mechanism from http://www.gamedev.net/community/forums/topic.asp?topic_id=561909
-------------------------------------------------------------------------
-function inheritsFrom( baseClass )
-
-    local new_class = {}
-    local class_mt = { __index = new_class }
-
-    function new_class:create()
-        local newinst = {}
-        setmetatable( newinst, class_mt )
-        return newinst
-    end
-
-    if nil ~= baseClass then
-        setmetatable( new_class, { __index = baseClass } )
-    end
-
-    -- Implementation of additional OO properties starts here --
-
-    -- Return the class object of the instance
-    function new_class:class()
-        return new_class;
-    end
-
-	-- Return the super class object of the instance, optional base class of the given class (must be part of hiearchy)
-    function new_class:baseClass(class)
-		return new_class:_B(class);
-    end
-
-    -- Return the super class object of the instance, optional base class of the given class (must be part of hiearchy)
-    function new_class:_B(class)
-		if (class==nil) or (new_class==class) then
-			return baseClass;
-		elseif(baseClass~=nil) then
-			return baseClass:_B(class);
-		end
-		return nil;
-    end
-
-	-- Return true if the caller is an instance of theClass
-    function new_class:_ISA( theClass )
-        local b_isa = false
-
-        local cur_class = new_class
-
-        while ( nil ~= cur_class ) and ( false == b_isa ) do
-            if cur_class == theClass then
-                b_isa = true
-            else
-                cur_class = cur_class:baseClass()
-            end
-        end
-
-        return b_isa
-    end
-
-    return new_class
-end
 -------------------------------------------------------------------------------------------
 -- FloatMap class
 -- This is for storing 2D map data. The 'data' field is a zero based, one
@@ -808,11 +748,11 @@ end
 -- GetIndex method to obtain the 1D index, which will handle any needs for
 -- wrapping in the x and y directions.
 -------------------------------------------------------------------------------------------
-FloatMap = inheritsFrom(nil)
+FloatMap = {}
 
 function FloatMap:New(width, height, wrapX, wrapY)
 	local new_inst = {}
-	setmetatable(new_inst, {__index = FloatMap});	--setup metatable
+	setmetatable(new_inst, {__index = self});	--setup metatable
 
 	new_inst.width = width
 	new_inst.height = height
@@ -1600,17 +1540,7 @@ function FloatMap:IsOnMap(x,y)
 	return true
 end
 -------------------------------------------------------------------------------------------
---ElevationMap class
--------------------------------------------------------------------------------------------
-ElevationMap = inheritsFrom(FloatMap)
-
-function ElevationMap:New(width, height, wrapX, wrapY)
-	local new_inst = FloatMap:New(width,height,wrapX,wrapY)
-	setmetatable(new_inst, {__index = ElevationMap});	--setup metatable
-	return new_inst
-end
--------------------------------------------------------------------------------------------
-function ElevationMap:IsBelowSeaLevel(x,y)
+function FloatMap:IsBelowSeaLevel(x,y)
 	local i = self:GetIndex(x,y)
 	if self.data[i] < self.seaLevelThreshold then
 		return true
@@ -1621,11 +1551,11 @@ end
 -------------------------------------------------------------------------------------------
 --RiverMap class
 -------------------------------------------------------------------------------------------
-RiverMap = inheritsFrom(nil)
+RiverMap = {}
 
 function RiverMap:New()
 	local new_inst = {}
-	setmetatable(new_inst, {__index = RiverMap});
+	setmetatable(new_inst, {__index = self});
 
 	--new_inst.g_ElevationMap = g_ElevationMap
 	new_inst.riverData = {}
@@ -2138,11 +2068,11 @@ end
 -------------------------------------------------------------------------------------------
 --RiverHex class
 -------------------------------------------------------------------------------------------
-RiverHex = inheritsFrom(nil)
+RiverHex = {}
 
 function RiverHex:New(x,y)
 	local new_inst = {}
-	setmetatable(new_inst, {__index = RiverHex});
+	setmetatable(new_inst, {__index = self});
 
 	new_inst.x = x
 	new_inst.y = y
@@ -2154,11 +2084,11 @@ end
 -------------------------------------------------------------------------------------------
 --RiverJunction class
 -------------------------------------------------------------------------------------------
-RiverJunction = inheritsFrom(nil)
+RiverJunction = {}
 
 function RiverJunction:New(x,y,isNorth)
 	local new_inst = {}
-	setmetatable(new_inst, {__index = RiverJunction});
+	setmetatable(new_inst, {__index = self});
 
 	new_inst.x = x
 	new_inst.y = y
@@ -2337,7 +2267,7 @@ function GenerateElevationMap(width,height,xWrap,yWrap)
 	local mountainFreq = 128/width * mc.mountainFreq --0.05/128
 	local twistMap = GenerateTwistedPerlinMap(width,height,xWrap,yWrap,twistMinFreq,twistMaxFreq,twistVar)
 	local mountainMap = GenerateMountainMap(width,height,xWrap,yWrap,mountainFreq)
-	local elevation_map = ElevationMap:New(width,height,xWrap,yWrap)
+	local elevation_map = FloatMap:New(width,height,xWrap,yWrap)
 	local i = 0
 	for y = 0,height - 1,1 do
 		for x = 0,width - 1,1 do
@@ -2895,41 +2825,37 @@ function DetermineXShift()
 	return x_shift;
 end
 ------------------------------------------------------------------------------
---DiffMap Class
-------------------------------------------------------------------------------
 --Seperated this from PWGeneratePlotTypes() to use it in other functions. -Bobert13
 
-DiffMap = inheritsFrom(FloatMap)
-
 function GenerateDiffMap(width,height,xWrap,yWrap)
-	DiffMap = FloatMap:New(width,height,xWrap,yWrap)
+	diff_map = FloatMap:New(width,height,xWrap,yWrap)
 	local i = 0
 	for y = 0, height - 1,1 do
 		for x = 0,width - 1,1 do
 			if g_ElevationMap:IsBelowSeaLevel(x,y) then
-				DiffMap.data[i] = 0.0
+				diff_map.data[i] = 0.0
 			else
-				DiffMap.data[i] = GetDifferenceAroundHex(i)
+				diff_map.data[i] = GetDifferenceAroundHex(i)
 			end
 			i=i+1
 		end
 	end
 
-	DiffMap:Normalize()
+	diff_map:Normalize()
 	i = 0
 	for y = 0, height - 1,1 do
 		for x = 0,width - 1,1 do
 			if g_ElevationMap:IsBelowSeaLevel(x,y) then
-				DiffMap.data[i] = 0.0
+				diff_map.data[i] = 0.0
 			else
-				DiffMap.data[i] = DiffMap.data[i] + g_ElevationMap.data[i] * 1.1
+				diff_map.data[i] = diff_map.data[i] + g_ElevationMap.data[i] * 1.1
 			end
 			i=i+1
 		end
 	end
 
-	DiffMap:Normalize()
-	return DiffMap
+	diff_map:Normalize()
+	return diff_map
 end
 -------------------------------------------------------------------------------------------
 
@@ -3197,7 +3123,7 @@ function Cleanup()
 						end
 					end
 				end
-				if DiffMap.data[i] < marshThreshold then
+				if g_DiffMap.data[i] < marshThreshold then
 					local tiles = GetCircle(i,1)
 					local marsh = true
 					for n=1,#tiles do
