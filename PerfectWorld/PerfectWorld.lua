@@ -4247,8 +4247,14 @@ end
 
 --------------------------------------------------------------------------------
 
-function Sum(array)
-	return Array.Reduce(array, function(x, y) return x + y end, 0)
+function Sum(array: table)
+	local sum: number = 0
+	for i = 1, #array do
+		local value: number = array[i]
+		sum = sum + value
+	end
+
+	return sum
 end
 
 function PW_Tests.MathTests.TestSum()
@@ -4258,7 +4264,7 @@ end
 
 --------------------------------------------------------------------------------
 
-function ArithmeticMean(array)
+function ArithmeticMean(array: table)
 	return Sum(array) / #array
 end
 
@@ -4269,14 +4275,51 @@ end
 
 --------------------------------------------------------------------------------
 
-function Variance(array)
+function Variance(array: table)
 	-- Save some CPU cycles by computing this once, outside the closure.
 	local mean = ArithmeticMean(array)
 	return ArithmeticMean(Array.Map(array, function(x) return (x - mean)^2 end))
 end
 
-function StandardDeviation(array)
+--------------------------------------------------------------------------------
+
+function StandardDeviation(array: table)
 	return math.sqrt(Variance(array))
+end
+
+--------------------------------------------------------------------------------
+
+function MinMax(array: table)
+	if #array == 0 then return 0, 0 end
+
+	local min: number = math.huge
+	local max: number = -min
+
+	for i = 1, #array do
+		local value: number = array[i]
+		if value < min then min = value end
+		if value > max then max = value end
+	end
+
+	return min, max
+end
+
+--------------------------------------------------------------------------------
+
+function NormalizeData(array: table)
+	local min, max = MinMax(array)
+	local range: number = max - min
+
+	if range == 0 then
+		for i = 1, #array do
+			array[i] = 0
+		end
+	else
+		for i = 1, #array do
+			local value: number = array[i]
+			array[i] = (value - min) / range
+		end
+	end
 end
 
 -- #############################################################################
