@@ -122,6 +122,7 @@ function GenerateMap()
 	local start_plot_database = AssignStartingPlots.Create(args)
 
 	local GoodyGen = AddGoodies(g_Width, g_Height);
+
 	PW_Log(string.format("Generated map in %.3f seconds.", os.clock() - time))
 end
 --------------------------------------------------------------------------------
@@ -388,6 +389,7 @@ function ApplyTerrainToPlot(plot, plot_type, terrain_type)
 end
 
 function ApplyTerrain(plotTypes, terrainTypes)
+	PW_Log("Applying terrain")
 	for y = 0, g_Height - 1 do
 		for x = 0, g_Width - 1 do
 			local plot = Map.GetPlot(x, y)
@@ -401,6 +403,8 @@ end
 
 local g_ElevationMap
 local g_RiverMap
+local g_RainfallMap
+local g_TemperatureMap
 --Global lookup tables used to track land, and terrain type. Used throughout terrain placement, Cleanup, and feature placement. -Bobert13
 local g_DesertTab = {}
 local g_SnowTab = {}
@@ -436,14 +440,14 @@ function PWGeneratePlotTypes()
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_OCEAN)
 			elseif g_DiffMap.data[i] < hills_threshold then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_LAND)
-				table.insert(g_LandTab,i)
+				g_LandTab[#g_LandTab + 1] = i
 			elseif g_DiffMap.data[i] < mountains_threshold then
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_HILLS)
-				table.insert(g_LandTab,i)
+				g_LandTab[#g_LandTab + 1] = i
 			else
 				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_MOUNTAIN)
-				table.insert(g_LandTab,i)
-				table.insert(mountain_hexes, PW_RectMap.Hex(x, y))
+				g_LandTab[#g_LandTab + 1] = i
+				mountain_hexes[#mountain_hexes + 1] = PW_RectHex(x, y)
 			end
 			i=i+1
 		end
@@ -451,12 +455,14 @@ function PWGeneratePlotTypes()
 
 	-- Gets rid of mountains that border the ocean but aren't next to flatter land.
 	local mountains_to_erode = {}
-	for _, hex in ipairs(mountain_hexes) do
-		if not hex:IsAdjacentTo({g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS}, g_PlotTypesMap) and hex:IsAdjacentTo({g_PLOT_TYPE_OCEAN}, g_PlotTypesMap) then
+	for i = 1, #mountain_hexes do
+		local hex = mountain_hexes[i]
+		if not g_PlotTypesMap:HasAdjacentMatching(hex.x, hex.y, {g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS}) and g_PlotTypesMap:HasAdjacentMatching(hex.x, hex.y, {g_PLOT_TYPE_OCEAN}) then
 			table.insert(mountains_to_erode, hex)
 		end
 	end
-	for _, hex in ipairs(mountains_to_erode) do
+	for i = 1, #mountains_to_erode do
+		local hex = mountains_to_erode[i]
 		if PW_RandInt(1,3) == 1 then
 			g_PlotTypesMap:Reset(hex.x, hex.y, g_PLOT_TYPE_LAND)
 		else
@@ -465,7 +471,6 @@ function PWGeneratePlotTypes()
 	end
 	
 	g_RainfallMap, g_TemperatureMap = GenerateRainfallMap(g_ElevationMap)
-
 	g_RiverMap = RiverMap:New(g_ElevationMap)
 	g_RiverMap:SetJunctionAltitudes()
 	g_RiverMap:SiltifyLakes()
@@ -475,18 +480,6 @@ end
 
 function PWGenerateTerrainTypes()
 	PW_Log("Generating terrain")
-	local W, H = Map.GetGridSize();
-	--first find minimum rain above sea level for a soft desert transition
-	local minRain = math.huge
-	for i = 0, W * H - 1 do
-		local x, y = g_PlotTypesMap:DeprecatedGetIndexForDataIndex(i)
-		local plot_type = g_PlotTypesMap:Get(x, y)
-		if plot_type ~= g_PLOT_TYPE_OCEAN then
-			if g_RainfallMap.data[i] < minRain then
-				minRain = g_RainfallMap.data[i]
-			end
-		end
-	end
 
 	--find exact thresholds
 	-- TODO(omar): Make coast generation less magical.
@@ -498,7 +491,7 @@ function PWGenerateTerrainTypes()
 	for y = 0, g_PlotTypesMap:Height() - 1 do
 		for x = 0, g_PlotTypesMap:Width() - 1 do
 			if g_PlotTypesMap:Get(x, y) == g_PLOT_TYPE_OCEAN then
-				if PW_RectMap.Hex(x, y):IsAdjacentTo({g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS, g_PLOT_TYPE_MOUNTAIN}, g_PlotTypesMap) then
+				if g_PlotTypesMap:HasAdjacentMatching(x, y, {g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS, g_PLOT_TYPE_MOUNTAIN}) then
 					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_COAST)
 				else
 					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_OCEAN)
@@ -513,15 +506,16 @@ function PWGenerateTerrainTypes()
 		for y = 0, g_TerrainTypesMap:Height() - 1 do
 			for x = 0, g_TerrainTypesMap:Width() - 1 do
 				if g_TerrainTypesMap:Get(x, y) == g_TERRAIN_TYPE_OCEAN then
-					local hex = PW_RectMap.Hex(x, y)
-					if g_ElevationMap.data[g_ElevationMap:GetIndex(x, y)] < coastsThreshold and hex:IsAdjacentTo({g_TERRAIN_TYPE_COAST}, g_TerrainTypesMap) then
+					local hex = PW_RectHex(x, y)
+					if g_ElevationMap.data[g_ElevationMap:GetIndex(x, y)] < coastsThreshold and g_TerrainTypesMap:HasAdjacentMatching(x, y, {g_TERRAIN_TYPE_COAST}) then
 						table.insert(new_coasts, hex)
 					end
 				end
 			end
 		end
 
-		for _, hex in ipairs(new_coasts) do
+		for i = 1, #new_coasts do
+			local hex = new_coasts[i]
 			g_TerrainTypesMap:Reset(hex.x, hex.y, g_TERRAIN_TYPE_COAST)
 		end
 	end
@@ -529,44 +523,47 @@ function PWGenerateTerrainTypes()
 	for y = 0, g_TerrainTypesMap:Height() - 1 do
 		for x = 0, g_TerrainTypesMap:Width() - 1 do
 			if g_TerrainTypesMap:Get(x, y) == g_TERRAIN_TYPE_OCEAN then
-				local hex = PW_RectMap.Hex(x, y)
-				if hex:CountAdjacent({g_TERRAIN_TYPE_COAST}, g_TerrainTypesMap) == 6 then
+				local hex = PW_RectHex(x, y)
+				if g_TerrainTypesMap:CountAdjacentMatching(x, y, {g_TERRAIN_TYPE_COAST}) == 6 then
 					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_COAST)
 				end
 			end
 		end
 	end
 
-	for i = 0, W * H - 1 do
-		local x, y = g_PlotTypesMap:DeprecatedGetIndexForDataIndex(i)
-		local plot_type = g_PlotTypesMap:Get(x, y)
-		if plot_type ~= g_PLOT_TYPE_OCEAN then -- Land
-			if g_TemperatureMap.data[i] < mc.snowTemperature then
-				g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_SNOW)
-				table.insert(g_SnowTab,i)
-			elseif g_TemperatureMap.data[i] < mc.tundraTemperature then
-				g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_TUNDRA)
-				table.insert(g_TundraTab,i)
-			elseif g_RainfallMap.data[i] < desertThreshold then
-				if g_TemperatureMap.data[i] < mc.desertMinTemperature then
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
-					table.insert(g_PlainsTab,i)
-				else
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_DESERT)
-					table.insert(g_DesertTab,i)
-				end
-			elseif g_RainfallMap.data[i] < plainsThreshold then
-				if g_RainfallMap.data[i] < (PW_Rand() * (plainsThreshold - desertThreshold) + plainsThreshold - desertThreshold)/2.0 + desertThreshold then
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
-					table.insert(g_PlainsTab,i)
+	local i = 0
+	for y = 0, g_PlotTypesMap:Height() - 1 do
+		for x = 0, g_PlotTypesMap:Width() - 1 do
+			local plot_type = g_PlotTypesMap:Get(x, y)
+			if plot_type ~= g_PLOT_TYPE_OCEAN then -- Land
+				if g_TemperatureMap.data[i] < mc.snowTemperature then
+					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_SNOW)
+					g_SnowTab[#g_SnowTab + 1] = i
+				elseif g_TemperatureMap.data[i] < mc.tundraTemperature then
+					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_TUNDRA)
+					g_TundraTab[#g_TundraTab + 1] = i
+				elseif g_RainfallMap.data[i] < desertThreshold then
+					if g_TemperatureMap.data[i] < mc.desertMinTemperature then
+						g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
+						g_PlainsTab[#g_PlainsTab + 1] = i
+					else
+						g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_DESERT)
+						g_DesertTab[#g_DesertTab + 1] = i
+					end
+				elseif g_RainfallMap.data[i] < plainsThreshold then
+					if g_RainfallMap.data[i] < (PW_Rand() * (plainsThreshold - desertThreshold) + plainsThreshold - desertThreshold)/2.0 + desertThreshold then
+						g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
+						g_PlainsTab[#g_PlainsTab + 1] = i
+					else
+						g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_GRASS)
+						g_GrassTab[#g_GrassTab + 1] = i
+					end
 				else
 					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_GRASS)
-					table.insert(g_GrassTab,i)
+					g_GrassTab[#g_GrassTab + 1] = i
 				end
-			else
-				g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_GRASS)
-				table.insert(g_GrassTab,i)
 			end
+			i = i + 1
 		end
 	end
 end
@@ -2278,6 +2275,7 @@ function GenerateElevationMap(width,height,xWrap,yWrap)
 end
 -------------------------------------------------------------------------------------------
 function GenerateTempMaps(elevation_map)
+	PW_Log("Generating Temperature Maps")
 
 	local aboveSeaLevelMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	local i = 0
@@ -2293,6 +2291,7 @@ function GenerateTempMaps(elevation_map)
 	end
 	aboveSeaLevelMap:Normalize()
 
+	PW_Log("Generating Summer Map")
 	local summerMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	local zenith = mc.tropicLatitudes
 	local topTempLat = mc.topLatitude + zenith
@@ -2316,6 +2315,7 @@ function GenerateTempMaps(elevation_map)
 	summerMap:Smooth(math.floor(elevation_map.width/8))
 	summerMap:Normalize()
 
+	PW_Log("Generating Winter Map")
 	local winterMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	zenith = -mc.tropicLatitudes
 	topTempLat = mc.topLatitude
@@ -2352,6 +2352,7 @@ function GenerateTempMaps(elevation_map)
 end
 -------------------------------------------------------------------------------------------
 function GenerateRainfallMap(elevation_map)
+	PW_Log("Generating Rainfall Map")
 	local summerMap,winterMap,temperature_map = GenerateTempMaps(elevation_map)
 	local geoMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	local i = 0
@@ -3142,80 +3143,84 @@ function AddFeatures()
 	local jungleThreshold = g_RainfallMap:FindThresholdFromPercent(mc.junglePercent,false,true)
 	--local marshThreshold = g_RainfallMap:FindThresholdFromPercent(marshPercent,false,true)
 
-	for i=0, WH-1, 1 do
-		local plot = Map.GetPlotByIndex(i)
-		if plot:IsWater() then
-			PlacePossibleIce(i,W)
-		elseif not plot:IsMountain() then
-			-- plot is hills or flat land
-			local x, y = g_TerrainTypesMap:DeprecatedGetIndexForDataIndex(i)
-			local plot_type = g_PlotTypesMap:Get(x, y)
-			local flat_terrain_type = g_TerrainTypesMap:Get(x, y)
+	local i = 0
+	for y = 0, H - 1 do
+		for x = 0, W - 1 do
+			local plot = Map.GetPlotByIndex(i)
+			if plot:IsWater() then
+				PlacePossibleIce(i,W)
+			elseif not plot:IsMountain() then
+				-- plot is hills or flat land
+				local plot_type = g_PlotTypesMap:Get(x, y)
+				local flat_terrain_type = g_TerrainTypesMap:Get(x, y)
 
-			if plot:GetTerrainType() == g_TERRAIN_TYPE_DESERT then
-				if plot:IsRiver() then
-					TerrainBuilder.SetFeatureType(plot, g_FEATURE_FLOODPLAINS)
-				else
-					-- TODO: Place Oasis
+				if plot:GetTerrainType() == g_TERRAIN_TYPE_DESERT then
+					if plot:IsRiver() then
+						TerrainBuilder.SetFeatureType(plot, g_FEATURE_FLOODPLAINS)
+					else
+						-- TODO: Place Oasis
+					end
+				elseif g_RainfallMap.data[i] >= jungleThreshold then -- Placing trees / marshes.
+					if g_TemperatureMap.data[i] >= mc.jungleMinTemperature then
+						TerrainBuilder.SetFeatureType(plot, g_FEATURE_JUNGLE)
+						ApplyTerrainToPlot(plot, plot_type, g_TERRAIN_TYPE_PLAINS)
+					elseif g_TemperatureMap.data[i] >= mc.treesMinTemperature then
+						TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
+					end
+				elseif g_RainfallMap.data[i] >= zeroTreesThreshold then
+					-- There can be forests and marshes.
+					-- local treeRange = jungleThreshold - zeroTreesThreshold
+					if g_TemperatureMap.data[i] > mc.treesMinTemperature and
+							PW_RandInt(1, 100) <= 30 * g_RainfallMap.data[i] ^ 2 + 60 then
+					--if g_TemperatureMap.data[i] > mc.treesMinTemperature and
+					--		g_RainfallMap.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
+						TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
+					elseif plot:GetTerrainType() == g_TERRAIN_TYPE_GRASS and
+							PW_RandInt(1, 100) <= 20 * g_RainfallMap.data[i] ^ 2 + 10 then
+						TerrainBuilder.SetFeatureType(plot, g_FEATURE_MARSH)
+					end
 				end
-			elseif g_RainfallMap.data[i] >= jungleThreshold then -- Placing trees / marshes.
-				if g_TemperatureMap.data[i] >= mc.jungleMinTemperature then
-					TerrainBuilder.SetFeatureType(plot, g_FEATURE_JUNGLE)
-					ApplyTerrainToPlot(plot, plot_type, g_TERRAIN_TYPE_PLAINS)
-				elseif g_TemperatureMap.data[i] >= mc.treesMinTemperature then
-					TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
-				end
-			elseif g_RainfallMap.data[i] >= zeroTreesThreshold then
-				-- There can be forests and marshes.
-				-- local treeRange = jungleThreshold - zeroTreesThreshold
-				if g_TemperatureMap.data[i] > mc.treesMinTemperature and
-						PW_RandInt(1, 100) <= 30 * g_RainfallMap.data[i] ^ 2 + 60 then
-				--if g_TemperatureMap.data[i] > mc.treesMinTemperature and
-				--		g_RainfallMap.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
-					TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
-				elseif plot:GetTerrainType() == g_TERRAIN_TYPE_GRASS and
-						PW_RandInt(1, 100) <= 20 * g_RainfallMap.data[i] ^ 2 + 10 then
-					TerrainBuilder.SetFeatureType(plot, g_FEATURE_MARSH)
-				end
+
+				--if g_RainfallMap.data[i] < jungleThreshold then
+				--	local treeRange = jungleThreshold - zeroTreesThreshold
+				--	if g_RainfallMap.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
+				--		if g_TemperatureMap.data[i] > mc.treesMinTemperature then
+				--			TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
+				--		end
+				--	end
+				--else
+				--	if g_TemperatureMap.data[i] < mc.jungleMinTemperature and g_TemperatureMap.data[i] > mc.treesMinTemperature then
+				--		TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
+				--	elseif g_TemperatureMap.data[i] >= mc.jungleMinTemperature then
+				--		local tiles = GetCircle(i,1)
+				--		local desertCount = 0
+				--		for n=1,#tiles do
+				--			local ii = tiles[n]
+				--			local nPlot = Map.GetPlotByIndex(ii)
+				--			if flat_terrain_type == g_TERRAIN_TYPE_DESERT then
+				--				desertCount = desertCount + 1
+				--			end
+				--		end
+				--		if desertCount < 4 then
+				--			local roll = PW_RandInt(1,100)
+				--			if roll > 4 then
+				--				TerrainBuilder.SetFeatureType(plot, g_FEATURE_JUNGLE)
+				--				ApplyTerrainToPlot(plot, plot_type, g_TERRAIN_TYPE_PLAINS)
+				--			else
+				--				TerrainBuilder.SetTerrainType(plot, flat_terrain_type);
+				--				TerrainBuilder.SetFeatureType(plot, g_FEATURE_MARSH)
+				--			end
+				--		end
+				--	end
+				--end
 			end
-
-			--if g_RainfallMap.data[i] < jungleThreshold then
-			--	local treeRange = jungleThreshold - zeroTreesThreshold
-			--	if g_RainfallMap.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
-			--		if g_TemperatureMap.data[i] > mc.treesMinTemperature then
-			--			TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
-			--		end
-			--	end		
-			--else
-			--	if g_TemperatureMap.data[i] < mc.jungleMinTemperature and g_TemperatureMap.data[i] > mc.treesMinTemperature then
-			--		TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
-			--	elseif g_TemperatureMap.data[i] >= mc.jungleMinTemperature then
-			--		local tiles = GetCircle(i,1)
-			--		local desertCount = 0
-			--		for n=1,#tiles do
-			--			local ii = tiles[n]
-			--			local nPlot = Map.GetPlotByIndex(ii)
-			--			if flat_terrain_type == g_TERRAIN_TYPE_DESERT then
-			--				desertCount = desertCount + 1
-			--			end
-			--		end
-			--		if desertCount < 4 then
-			--			local roll = PW_RandInt(1,100)
-			--			if roll > 4 then
-			--				TerrainBuilder.SetFeatureType(plot, g_FEATURE_JUNGLE)
-			--				ApplyTerrainToPlot(plot, plot_type, g_TERRAIN_TYPE_PLAINS)
-			--			else									
-			--				TerrainBuilder.SetTerrainType(plot, flat_terrain_type);
-			--				TerrainBuilder.SetFeatureType(plot, g_FEATURE_MARSH)
-			--			end
-			--		end
-			--	end
-			--end
+			i = i + 1
 		end
 	end
 end
 -------------------------------------------------------------------------------------------
 function AddRivers()
+	PW_Log("Adding Rivers")
 	local gridWidth, gridHeight = Map.GetGridSize();
 	for y = 0, gridHeight - 1,1 do
 		for x = 0,gridWidth - 1,1 do
@@ -3449,6 +3454,77 @@ end
 -- #############################################################################
 
 --------------------------------------------------------------------------------
+-- PW_Vector
+--------------------------------------------------------------------------------
+
+-- Avoid modifying the definition of hstructures. We don't want to force users
+-- to restart the client when this mod is updated.
+hstructure PW_VectorMeta
+	__index: PW_VectorMeta
+
+	New2: ifunction
+	New3: ifunction
+	Zero: ifunction
+
+	__add: ifunction
+	__sub: ifunction
+	__mul: ifunction
+	__unm: ifunction
+
+	__eq: ifunction
+end
+
+hstructure PW_Vector
+	meta: PW_VectorMeta
+
+	x: number
+	y: number
+	z: number
+end
+
+PW_Vector = hmake PW_VectorMeta{}
+PW_Vector.__index = PW_Vector
+
+function PW_Vector.New2(self: PW_VectorMeta, x: number, y: number)
+	return self:New3(x, y, 0)
+end
+
+function PW_Vector.New3(self: PW_VectorMeta, x: number, y: number, z: number)
+	local v = hmake PW_Vector{}
+	setmetatable(v, self)
+
+	v.x = x
+	v.y = y
+	v.z = z
+
+	return v
+end
+
+function PW_Vector.Zero(self: PW_VectorMeta)
+	return self:New3(0, 0, 0)
+end
+
+function PW_Vector.__add(u: PW_Vector, v: PW_Vector)
+	return PW_Vector:New3(u.x + v.x, u.y + v.y, u.z + v.z)
+end
+
+function PW_Vector.__sub(u: PW_Vector, v: PW_Vector)
+	return PW_Vector:New3(u.x - v.x, u.y - v.y, u.z - v.z)
+end
+
+function PW_Vector.__mul(c: number, v: PW_Vector)
+	return PW_Vector:New3(c * v.x, c * v.y, c * v.z)
+end
+
+function PW_Vector.__unm(v: PW_Vector)
+	return PW_Vector:New3(-v.x, -v.y, -v.z)
+end
+
+function PW_Vector.__eq(u: PW_Vector, v: PW_Vector)
+	return u.x == v.x and u.y == v.y and u.z == v.z
+end
+
+--------------------------------------------------------------------------------
 -- PW_Directions
 --------------------------------------------------------------------------------
 
@@ -3481,8 +3557,7 @@ PW_Directions = {
 }
 
 --------------------------------------------------------------------------------
--- PW_CubeMapHex
--- Represents a location on a hexagonal grid/map using cube coordinates.
+-- PW_CubeCoordinates
 --
 -- Algorihms on hexagonal grids are efficiently implemented in cube coordinates,
 -- which are vectors. Amit Patel wrote an excellent article on the subject:
@@ -3499,59 +3574,33 @@ PW_Directions = {
 --     /               |          ( 0,-1, 1)  ( 1,-1, 0)
 --    /+z              |
 ---------------------------------------------------------------------------------
-PW_CubeMapHex = {}
 
--- Hexagonal coordinates aren't stored directly. PW_CubeMap is defined simply
--- to provide a bit of API candy.
-PW_CubeMap = {}
-
-function PW_CubeMapHex:New(x, y, z)
-	local obj = {}
-	setmetatable(obj, {__index = self})
-
-	obj.x = x
-	obj.y = y
-	obj.z = z
-
-	return obj
-end
-
--- Another way to spell `PW_CubeMapHex:New`.
-function PW_CubeMap.Hex(x, y, z)
-	return PW_CubeMapHex:New(x, y, z)
+-- Another way to spell `PW_Vector:New3`.
+function PW_CubeHex(x: number, y: number, z: number)
+	return PW_Vector:New3(x, y, z)
 end
 
 -- Converts from cube coordinates to offset rectangular coordinates, A.K.A. Civ 6 coordinates.
-function PW_CubeMapHex:ToRect()
-    local x = self.x + (self.y - (self.y % 2)) / 2
-    local y = self.y
+function PW_ToRect(hex: PW_Vector)
+    local x = hex.x + (hex.y - (hex.y % 2)) / 2
+    local y = hex.y
 
-    return PW_RectMap.Hex(x, y)
+    return PW_RectHex(x, y)
 end
 
--- Adds cube coordinates vectors.
--- u, v: cube coordinate vectors.
-function PW_AddCubeMapHexes(u, v)
-	return PW_CubeMap.Hex(u.x + v.x, u.y + v.y, u.z + v.z)
-end
-
--- Scales a cube coordinate vector.
--- scalar: the amount by which to scale the cube coordinate vector.
-function PW_CubeMapHex:Scale(scalar)
-	return PW_CubeMap.Hex(scalar * self.x, scalar * self.y, scalar * self.z)
-end
+PW_CubeCoordinates = {}
 
 -- Direction vector constants for a hexagonal grid.
-PW_CUBE_DIRECTION_VECTOR_EAST =      PW_CubeMap.Hex( 1,  0, -1)
-PW_CUBE_DIRECTION_VECTOR_NORTHEAST = PW_CubeMap.Hex( 0,  1, -1)
-PW_CUBE_DIRECTION_VECTOR_NORTHWEST = PW_CubeMap.Hex(-1,  1,  0)
-PW_CUBE_DIRECTION_VECTOR_WEST =      PW_CubeMap.Hex(-1,  0,  1)
-PW_CUBE_DIRECTION_VECTOR_SOUTHWEST = PW_CubeMap.Hex( 0, -1,  1)
-PW_CUBE_DIRECTION_VECTOR_SOUTHEAST = PW_CubeMap.Hex( 1, -1,  0)
+PW_CUBE_DIRECTION_VECTOR_EAST =      PW_CubeHex( 1,  0, -1)
+PW_CUBE_DIRECTION_VECTOR_NORTHEAST = PW_CubeHex( 0,  1, -1)
+PW_CUBE_DIRECTION_VECTOR_NORTHWEST = PW_CubeHex(-1,  1,  0)
+PW_CUBE_DIRECTION_VECTOR_WEST =      PW_CubeHex(-1,  0,  1)
+PW_CUBE_DIRECTION_VECTOR_SOUTHWEST = PW_CubeHex( 0, -1,  1)
+PW_CUBE_DIRECTION_VECTOR_SOUTHEAST = PW_CubeHex( 1, -1,  0)
 
 -- Enumerates the direction vectors for iteration and name-based lookup.
 -- The enumeration is in counterclockwise order, starting with East.
-PW_CubeMapDirectionVectors = {
+PW_CubeCoordinates.DirectionVectors = {
 	PW_CUBE_DIRECTION_VECTOR_EAST,
 	PW_CUBE_DIRECTION_VECTOR_NORTHEAST,
 	PW_CUBE_DIRECTION_VECTOR_NORTHWEST,
@@ -3569,28 +3618,33 @@ PW_CubeMapDirectionVectors = {
 
 -- Returns the cube coordinates of a neighboring hex.
 -- direction: the relative direction (one of PW_Directions) of the neigboring hex.
-function PW_CubeMapHex:Neighbor(direction)
-	return PW_AddCubeMapHexes(self, PW_CubeMapDirectionVectors[direction])
+function PW_CubeCoordinates.Neighbor(hex: PW_Vector, direction: string)
+	return hex + PW_CubeCoordinates.DirectionVectors[direction]
 end
 
 -- Returns the cube coordinates of the neighboring hexes.
-function PW_CubeMapHex:Neighbors()
-	local neighbors = {}
+function PW_CubeCoordinates.Neighbors(hex: PW_Vector, out_array: table)
+	out_array = out_array or {}
 
-	for _, dir in ipairs(PW_CubeMapDirectionVectors) do
-		table.insert(neighbors, PW_AddCubeMapHexes(self, dir))
+	local neighbor = PW_CubeCoordinates.Neighbor
+	for i = 1, #PW_Directions do
+		out_array[#out_array + 1] = neighbor(hex, PW_Directions[i])
 	end
 
-	return neighbors
+	return out_array
 end
 
 -- Returns the cube coordinates of hexes forming a ring.
+-- center: the center of the ring.
 -- radius: the radius of the ring.
-function PW_CubeMapHex:Ring(radius)
-	if radius < 0 then return {} end
-	if radius == 0 then return { self } end
-
-	local hexes = {}
+-- out_array: an optional array in which to append the output.
+function PW_CubeCoordinates.Ring(center: PW_Vector, radius: number, out_array: table)
+	out_array = out_array or {}
+	if radius < 0 then return out_array end
+	if radius == 0 then
+		out_array[#out_array + 1] = center
+		return out_array
+	end
 
 	-- With an initial heading of `East`, trace the ring in a counterclockwise direction.
 	--      ____
@@ -3599,31 +3653,38 @@ function PW_CubeMapHex:Ring(radius)
 	--    \  /r  /
 	--     \/___/
 	--     X---->
-	--
-	local hex = PW_AddCubeMapHexes(self, PW_CubeMapDirectionVectors.Southwest:Scale(radius))
-	for _, dir in ipairs(PW_Directions) do
+
+	-- localize for use in loop
+	local neighbor = PW_CubeCoordinates.Neighbor
+	local hex = center + radius * PW_CubeCoordinates.DirectionVectors.Southwest
+	for i = 1, #PW_Directions do
 		for _ = 1, radius do
-			table.insert(hexes, hex)
-			hex = hex:Neighbor(dir)
+			out_array[#out_array + 1] = hex
+			hex = neighbor(hex, PW_Directions[i])
 		end
 	end
 
-	return hexes
+	return out_array
 end
 
 -- Returns the cube coordinates of hexes forming concentric rings.
+-- center: the center of the spiral.
 -- radius: the radius of the largest ring.
-function PW_CubeMapHex:Spiral(radius)
-	local hexes = {}
+-- out_array: an optional array in which to append the output.
+function PW_CubeCoordinates.Spiral(center: PW_Vector, radius: number, out_array: table)
+	out_array = out_array or {}
+
+	-- localize for use in loop
+	local ring = PW_CubeCoordinates.Ring
 	for r = 0, radius do
-		Array.AppendArray(hexes, self:Ring(r))
+		ring(center, radius, out_array)
 	end
 
-	return hexes
+	return out_array
 end
 
 --------------------------------------------------------------------------------
--- PW_RectMapHex
+-- PW_RectCoordinates
 -- Represents a location on a hexagonal grid/map using offset rectangular
 -- coordinates. This is the same coordinate system used by Civilization 6.
 --
@@ -3645,75 +3706,44 @@ end
 --                     |            (-1,-2) ( 0,-2) ( 1,-2)
 --                     |
 --------------------------------------------------------------------------------
-PW_RectMapHex = {}
 
-function PW_RectMapHex:New(x, y)
-	local obj = {}
-	setmetatable(obj, {__index = self})
-
-	obj.x = x
-	obj.y = y
-
-	return obj
+-- Another way to spell `PW_Vector:New2`.
+function PW_RectHex(x: number, y: number)
+	return PW_Vector:New2(x, y)
 end
 
 -- Converts to cube coordinates.
-function PW_RectMapHex:ToCube()
-	local x = self.x - (self.y - (self.y % 2)) / 2
-    local y = self.y
+function PW_ToCube(hex: PW_Vector)
+	local x = hex.x - (hex.y - (hex.y % 2)) / 2
+    local y = hex.y
     local z = -x-y
 
-    return PW_CubeMap.Hex(x, y, z)
+    return PW_CubeHex(x, y, z)
 end
+
+PW_RectCoordinates = {}
 
 -- Returns the coordinates of a neighboring hex.
 -- direction: the relative direction (one of PW_Directions) of the neigboring hex.
-function PW_RectMapHex:Neighbor(direction)
-	return self:ToCube():Neighbor(direction):ToRect()
+function PW_RectCoordinates.Neighbor(hex: PW_Vector, direction: string)
+	return PW_ToRect(PW_CubeCoordinates.Neighbor(PW_ToCube(hex), direction))
 end
 
 -- Returns the coordinates of the neighboring hexes.
-function PW_RectMapHex:Neighbors()
-	return Array.Map(self:ToCube():Neighbors(), PW_CubeMapHex.ToRect)
+function PW_RectCoordinates.Neighbors(hex: PW_Vector)
+	return Array.Map(PW_CubeCoordinates.Neighbors(PW_ToCube(hex)), PW_ToRect)
 end
 
 -- Returns the coordinates of hexes forming a ring.
 -- radius: the radius of the ring.
-function PW_RectMapHex:Ring(radius)
-	return Array.Map(self:ToCube():Ring(radius), PW_CubeMapHex.ToRect)
+function PW_RectCoordinates.Ring(hex: PW_Vector, radius: number)
+	return Array.Map(PW_CubeCoordinates.Ring(PW_ToCube(hex), radius), PW_ToRect)
 end
 
 -- Returns the coordinates of hexes forming concentric rings.
 -- radius: the radius of the largest ring.
-function PW_RectMapHex:Spiral(radius)
-	return Array.Map(self:ToCube():Spiral(radius), PW_CubeMapHex.ToRect)
-end
-
--- Returns whether any of values are present in the neighboring hexes.
-function PW_RectMapHex:IsAdjacentTo(values, rect_map)
-	for _, neighbor in ipairs(self:Neighbors()) do
-		if Array.Contains(values, rect_map:Get(neighbor.x, neighbor.y)) then
-			return true
-		end
-	end
-
-	return false
-end
-
--- Returns the number of neighboring hexes where any of the values are present.
-function PW_RectMapHex:CountAdjacent(values, rect_map)
-	local count = 0
-	for _, neighbor in ipairs(self:Neighbors()) do
-		if Array.Contains(values, rect_map:Get(neighbor.x, neighbor.y)) then
-			count = count + 1
-		end
-	end
-
-	return count
-end
-
-function PW_RectMapHex:IsOnMap(rect_map)
-	return rect_map:HexExistsAt(self.x, self.y)
+function PW_RectCoordinates.Spiral(hex: PW_Vector, radius: number)
+	return Array.Map(PW_CubeCoordinates.Spiral(PW_ToCube(hex), radius), PW_ToRect)
 end
 
 --------------------------------------------------------------------------------
@@ -3780,31 +3810,53 @@ function PW_RectMap:WrapY()
 	return self.wrap_y_
 end
 
-function PW_RectMap:HexExistsAt(x, y)
-	return (0 <= x and x < self:Width() or self:WrapX()) and (0 <= y and y < self:Width() or self:WrapY())
+function PW_RectMap:HexExistsAt(x: number, y: number)
+	return (0 <= x and x < self:Width() or self:WrapX()) and (0 <= y and y < self:Height() or self:WrapY())
 end
 
-function PW_RectMap.Hex(x, y)
-	return PW_RectMapHex:New(x, y)
-end
-
-function PW_RectMap:Get(x, y)
+function PW_RectMap:Get(x: number, y: number)
 	local i, j = self.matrix_index_(x, y)
 	return self.matrix_:Get(i, j)
 end
 
-function PW_RectMap:Reset(x, y, new_value)
+function PW_RectMap:Reset(x: number, y: number, new_value)
 	if new_value == nil then new_value = self.default_value_ end
 	local i, j = self.matrix_index_(x, y)
 	return self.matrix_:Reset(i, j, new_value)
 end
 
-function PW_RectMap:FillWith(fill_func)
+function PW_RectMap:FillWith(fill_func: ifunction)
 	local function matrix_fill_func(i, j)
 		return fill_func(j, i)
 	end
 
 	self.matrix_:FillWith(matrix_fill_func)
+end
+
+-- Returns whether any of values are present in the neighboring hexes.
+function PW_RectMap:HasAdjacentMatching(x: number, y: number, values: table)
+	local neighbors = PW_RectCoordinates.Neighbors(PW_RectHex(x, y))
+	for i = 1, #neighbors do
+		if Array.Contains(values, self:Get(neighbors[i].x, neighbors[i].y)) then
+			return true
+		end
+	end
+
+	return false
+end
+
+-- Returns the number of neighboring hexes where any of the values are present.
+function PW_RectMap:CountAdjacentMatching(x: number, y: number, values: table)
+	local count = 0
+
+	local neighbors = PW_RectCoordinates.Neighbors(PW_RectHex(x, y))
+	for i = 1, #neighbors do
+		if Array.Contains(values, self:Get(neighbors[i].x, neighbors[i].y)) then
+			count = count + 1
+		end
+	end
+
+	return count
 end
 
 --------------------------------------------------------------------------------
@@ -4029,70 +4081,77 @@ end
 -- PW_Matrix
 -- A zero-based, potentially sparse, row-major matrix.
 -------------------------------------------------------------------------------
-PW_Matrix = {}
 
--- Returns a new matrix.
---
--- rows: the number of rows.
--- cols: the number of columns.
--- fill_func: an optional function, f(i, j), that supplies an initial value for
---            the matrix at row i, column j.
-function PW_Matrix:New(rows, cols, fill_func)
-	local obj = {}
-	setmetatable(obj, {__index = self})
+-- Avoid modifying the definition of hstructures. We don't want to force users
+-- to restart the client when this mod is updated.
+hstructure PW_MatrixMeta
+	__index: PW_MatrixMeta
 
-	obj.rows_ = rows
-	obj.cols_ = cols
-	obj.data_ = {}
-	obj.index_ = function(i, j) return 1 + i * obj.cols_ + j end
+	New: ifunction
 
-	if fill_func then
-		for i = 0, rows - 1 do
-			for j = 0, cols - 1 do
-				obj.data_[obj.index_(i, j)] = fill_func(i, j)
-			end
-		end
-	end
-
-	return obj
+	DataIndex: ifunction
+	AcceptsIndex: ifunction
+	NumRows: ifunction
+	NumCols: ifunction
+	Get: ifunction
+	Reset: ifunction
+	FillWith: ifunction
 end
 
--- This should be easy to implement via PW_Matrix:New; just have fill_func
--- perform the copy.
--- function PW_Matrix:Clone()
+hstructure PW_Matrix
+	meta: PW_MatrixMeta
 
-function PW_Matrix:NumRows()
-	return self.rows_
+	rows: number
+	cols: number
+	data: table
 end
 
-function PW_Matrix:NumCols()
-	return self.cols_
+PW_Matrix = hmake PW_MatrixMeta{}
+PW_Matrix.__index = PW_Matrix
+
+function PW_Matrix.New(self: PW_MatrixMeta, rows: number, cols: number, fill_func: ifunction)
+	local matrix = hmake PW_Matrix{}
+	setmetatable(matrix, self)
+
+	matrix.rows = rows
+	matrix.cols = cols
+	matrix.data = {}
+
+	matrix:FillWith(fill_func)
+
+	return matrix
 end
 
-function PW_Matrix:AcceptsIndex(i, j)
-	return 0 <= i and i < self.rows_ and 0 <= j and j < self.cols_
+function PW_Matrix:DataIndex(i: number, j: number)
+	return 1 + i * self.cols + j
 end
 
-function PW_Matrix:Get(i, j)
+function PW_Matrix:AcceptsIndex(i: number, j: number)
+	return 0 <= i and i < self.rows and 0 <= j and j < self.cols
+end
+
+function PW_Matrix:NumRows() return self.rows end
+
+function PW_Matrix:NumCols() return self.cols end
+
+function PW_Matrix:Get(i: number, j: number)
 	assert(self:AcceptsIndex(i, j))
-	return self.data_[self.index_(i, j)]
+	return self.data[self:DataIndex(i, j)]
 end
 
-function PW_Matrix:Reset(i, j, value)
+function PW_Matrix:Reset(i: number, j: number, value)
 	assert(self:AcceptsIndex(i, j))
-	self.data_[self.index_(i, j)] = value
+	self.data[self:DataIndex(i, j)] = value
 end
 
-function PW_Matrix:FillWith(fill_func)
+function PW_Matrix:FillWith(fill_func: ifunction)
 	if not fill_func then return end
-	for i = 0, self.rows_ - 1 do
-		for j = 0, self.cols_ - 1 do
-			self.data_[self.index_(i, j)] = fill_func(i, j)
+	for i = 0, self.rows - 1 do
+		for j = 0, self.cols - 1 do
+			self.data[self:DataIndex(i, j)] = fill_func(i, j)
 		end
 	end
 end
-
---------------------------------------------------------------------------------
 
 -- Tests for PW_Matrix
 PW_Tests.MatrixTests = {}
@@ -4155,24 +4214,6 @@ function PW_Tests.MatrixTests.TestReset()
 	if matrix:Get(0, 1) ~= nil then return PW_Status:Error("Value in matrix not erased") end
 end
 
---------------------------------------------------------------------------------
--- Stuff to remove.
---------------------------------------------------------------------------------
-
-function PW_RectMap:DeprecatedGetIndexForDataIndex(data_index)
-	local i, j = self.matrix_:DeprecatedGetIndexForDataIndex(data_index)
-
-	return j, i
-end
-
-
-function PW_Matrix:DeprecatedGetIndexForDataIndex(data_index)
-	local j = data_index % self.cols_
-	local i = (data_index - j) / self.cols_
-
-	return i, j
-end
-
 -- #############################################################################
 -- PerfectWorld 6 Math
 -- #############################################################################
@@ -4183,7 +4224,7 @@ PW_Tests.MathTests = {}
 --------------------------------------------------------------------------------
 
 -- Wraps a `value` to the closed interval [`min`, `max`].
-function WrapWithinClosedRange(value, min, max)
+function WrapWithinClosedRange(value: number, min: number, max: number)
 	local shifted = value - min
 	local limit = max - min + 1
 	return shifted % limit + min
@@ -4199,7 +4240,7 @@ end
 --------------------------------------------------------------------------------
 
 -- Clamps a `value` to the closed interval [`min`, `max`].
-function ClampToClosedRange(value, min, max)
+function ClampToClosedRange(value: number, min: number, max: number)
 	if value < min then
 		return min
 	elseif value > max then
@@ -4212,14 +4253,12 @@ end
 function PW_Tests.MathTests.TestClampToClosedRange()
 	if ClampToClosedRange(-1, 0, 10) ~= 0 then return PW_Status:Error() end
 	if ClampToClosedRange(11, 0, 10) ~= 10 then return PW_Status:Error() end
-	if ClampToClosedRange("alligator", "b", "d") ~= "b" then return PW_Status:Error() end
-	if ClampToClosedRange("dog", "b", "d") ~= "d" then return PW_Status:Error() end
 end
 
 --------------------------------------------------------------------------------
 
 function Sum(array)
-	return Array.Reduce(array, 0, function(x, y) return x + y end)
+	return Array.Reduce(array, function(x, y) return x + y end, 0)
 end
 
 function PW_Tests.MathTests.TestSum()
@@ -4256,47 +4295,53 @@ end
 
 Array = {}
 
-function Array.Contains(array, value)
-	for _, array_value in ipairs(array) do
-		if array_value == value then return true end
+function Array.Clear(array: table)
+	for i = 1, #array do
+		array[i] = nil
+	end
+end
+
+function Array.Contains(array: table, value)
+	for i = 1, #array do
+		if array[i] == value then
+			return true
+		end
 	end
 
 	return false
 end
 
-function Array.Filter(array, predicate)
-	local new_array = {}
-	for _, value in ipairs(array) do
+function Array.Filter(array:table, predicate: ifunction, out_array: table)
+	out_array = out_array or {}
+
+	for i = 1, #array do
+		local value = array[i]
 		if predicate(value) then
-			table.insert(new_array, value)
+			out_array[#out_array + 1] = value
 		end
 	end
 
-	return new_array
+	return out_array
 end
 
-function Array.Map(array, map_func)
-	local new_array = {}
-	for i, value in ipairs(array) do
-		table.insert(new_array, map_func(value))
+function Array.Map(array: table, map_func: ifunction, out_array: table)
+	out_array = out_array or {}
+
+	for i = 1, #array do
+		out_array[i] = map_func(array[i])
 	end
 
-	return new_array
+	return out_array
 end
 
-function Array.Reduce(array, initial_value, accumulator)
+function Array.Reduce(array: table, accumulator: ifunction, initial_value)
 	local ret = initial_value
-	for _, value in ipairs(array) do
-		ret = accumulator(ret, value)
+
+	for i = 1, #array do
+		ret = accumulator(ret, array[i])
 	end
 
 	return ret
-end
-
-function Array.AppendArray(destination_array, other_array)
-	for _, value in ipairs(other_array) do
-		table.insert(destination_array, value)
-	end
 end
 
 -- #############################################################################
