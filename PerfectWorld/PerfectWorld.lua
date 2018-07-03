@@ -471,8 +471,8 @@ function PW_GenerateTerrainTypes(elevation_map, plot_types_map, rainfall_map, te
 	--find exact thresholds
 	-- TODO(omar): Make coast generation less magical.
 	local coastsThreshold = elevation_map:FindThresholdFromPercent(0.3, false, false)
-	local desertThreshold = rainfall_map:FindThresholdFromPercent(mc.desertPercent,false,true)
-	local plainsThreshold = rainfall_map:FindThresholdFromPercent(mc.plainsPercent,false,true)
+	local desertThreshold = Percentile(mc.desertPercent, rainfall_map:Matrix().data, { exclude_zeros = true })
+	local plainsThreshold = Percentile(mc.plainsPercent, rainfall_map:Matrix().data, { exclude_zeros = true })
 
 	PW_Log("Creating coastlines")
 	for y = 0, plot_types_map:Height() - 1 do
@@ -522,23 +522,25 @@ function PW_GenerateTerrainTypes(elevation_map, plot_types_map, rainfall_map, te
 	for y = 0, plot_types_map:Height() - 1 do
 		for x = 0, plot_types_map:Width() - 1 do
 			local plot_type = plot_types_map:Get(x, y)
+			local rainfall = rainfall_map:Get(x, y)
+			local temperature = temperature_map.data[i]
 			if plot_type ~= g_PLOT_TYPE_OCEAN then -- Land
-				if temperature_map.data[i] < mc.snowTemperature then
+				if temperature < mc.snowTemperature then
 					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_SNOW)
 					g_SnowTab[#g_SnowTab + 1] = i
-				elseif temperature_map.data[i] < mc.tundraTemperature then
+				elseif temperature < mc.tundraTemperature then
 					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_TUNDRA)
 					g_TundraTab[#g_TundraTab + 1] = i
-				elseif rainfall_map.data[i] < desertThreshold then
-					if temperature_map.data[i] < mc.desertMinTemperature then
+				elseif rainfall < desertThreshold then
+					if temperature < mc.desertMinTemperature then
 						terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
 						g_PlainsTab[#g_PlainsTab + 1] = i
 					else
 						terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_DESERT)
 						g_DesertTab[#g_DesertTab + 1] = i
 					end
-				elseif rainfall_map.data[i] < plainsThreshold then
-					if rainfall_map.data[i] < (PW_Rand() * (plainsThreshold - desertThreshold) + plainsThreshold - desertThreshold)/2.0 + desertThreshold then
+				elseif rainfall < plainsThreshold then
+					if rainfall < (PW_Rand() * (plainsThreshold - desertThreshold) + plainsThreshold - desertThreshold)/2.0 + desertThreshold then
 						terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
 						g_PlainsTab[#g_PlainsTab + 1] = i
 					else
@@ -1974,9 +1976,9 @@ function RiverMap:SetRiverSizes(rainfall_map)
 	for n=1,#junctionList do
 		local junction = junctionList[n]
 		local nextJunction = junction
-		local i = g_ElevationMap:GetIndex(junction.x,junction.y)
+		local x, y = junction.x, junction.y
 		while true do
-			nextJunction.size = (nextJunction.size + rainfall_map.data[i]) * mc.riverRainCheatFactor
+			nextJunction.size = (nextJunction.size + rainfall_map:Get(x, y)) * mc.riverRainCheatFactor
 			if nextJunction.flow == mc.NOFLOW or self:IsTouchingOcean(nextJunction) then
 				nextJunction.size = 0.0
 				break
@@ -2491,15 +2493,15 @@ function PW_GenerateRainfallMap(elevation_map)
 	rainfallWinterMap:Normalize()
 	rainfallGeostrophicMap:Normalize()
 
-	local rainfall_map = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
+	local rainfall_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap })
 	i = 0
 	for y = 0,elevation_map.height - 1,1 do
 		for x = 0,elevation_map.width - 1,1 do
-			rainfall_map.data[i] = rainfallSummerMap.data[i] + rainfallWinterMap.data[i] + (rainfallGeostrophicMap.data[i] * mc.geostrophicFactor)
+			rainfall_map:Reset(x, y, rainfallSummerMap.data[i] + rainfallWinterMap.data[i] + (rainfallGeostrophicMap.data[i] * mc.geostrophicFactor))
 			i=i+1
 		end
 	end
-	rainfall_map:Normalize()
+	NormalizeData(rainfall_map:Matrix().data)
 
 	return rainfall_map, temperature_map
 end
@@ -3123,16 +3125,14 @@ function AddFeatures(rainfall_map, temperature_map, plot_types_map, terrain_type
 	local W, H = Map.GetGridSize()
 	local WH = W*H
 
-	local zeroTreesThreshold = rainfall_map:FindThresholdFromPercent(mc.zeroTreesPercent,false,true)
-	local jungleThreshold = rainfall_map:FindThresholdFromPercent(mc.junglePercent,false,true)
-	--local marshThreshold = rainfall_map:FindThresholdFromPercent(marshPercent,false,true)
+	local zeroTreesThreshold = Percentile(mc.zeroTreesPercent, rainfall_map:Matrix().data, { exclude_zeros = true })
+	local jungleThreshold = Percentile(mc.junglePercent, rainfall_map:Matrix().data, { exclude_zeros = true })
 
 	local i = 0
 	for y = 0, H - 1 do
 		for x = 0, W - 1 do
 			local plot = Map.GetPlotByIndex(i)
 			if plot:IsWater() then
-				local temp = temperature_map.data[i]
 				local latitude = LatitudeAtY(y)
 				local randvalNorth = PW_Rand() * (mc.iceNorthLatitudeLimit - mc.topLatitude) + mc.topLatitude - 3
 				local randvalSouth = PW_Rand() * (mc.bottomLatitude - mc.iceSouthLatitudeLimit) + mc.iceSouthLatitudeLimit + 3
@@ -3143,6 +3143,8 @@ function AddFeatures(rainfall_map, temperature_map, plot_types_map, terrain_type
 				-- plot is hills or flat land
 				local plot_type = plot_types_map:Get(x, y)
 				local flat_terrain_type = terrain_types_map:Get(x, y)
+				local rainfall = rainfall_map:Get(x, y)
+				local temperature = temperature_map.data[i]
 
 				if plot:GetTerrainType() == g_TERRAIN_TYPE_DESERT then
 					if plot:IsRiver() then
@@ -3150,38 +3152,38 @@ function AddFeatures(rainfall_map, temperature_map, plot_types_map, terrain_type
 					else
 						-- TODO: Place Oasis
 					end
-				elseif rainfall_map.data[i] >= jungleThreshold then -- Placing trees / marshes.
-					if temperature_map.data[i] >= mc.jungleMinTemperature then
+				elseif rainfall >= jungleThreshold then -- Placing trees / marshes.
+					if temperature >= mc.jungleMinTemperature then
 						TerrainBuilder.SetFeatureType(plot, g_FEATURE_JUNGLE)
 						ApplyTerrainToPlot(plot, plot_type, g_TERRAIN_TYPE_PLAINS)
-					elseif temperature_map.data[i] >= mc.treesMinTemperature then
+					elseif temperature >= mc.treesMinTemperature then
 						TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
 					end
-				elseif rainfall_map.data[i] >= zeroTreesThreshold then
+				elseif rainfall >= zeroTreesThreshold then
 					-- There can be forests and marshes.
 					-- local treeRange = jungleThreshold - zeroTreesThreshold
-					if temperature_map.data[i] > mc.treesMinTemperature and
-							PW_RandInt(1, 100) <= 30 * rainfall_map.data[i] ^ 2 + 60 then
-					--if temperature_map.data[i] > mc.treesMinTemperature and
-					--		rainfall_map.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
+					if temperature > mc.treesMinTemperature and
+							PW_RandInt(1, 100) <= 30 * rainfall ^ 2 + 60 then
+					--if temperature > mc.treesMinTemperature and
+					--		rainfall > PW_Rand() * treeRange + zeroTreesThreshold then
 						TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
 					elseif plot:GetTerrainType() == g_TERRAIN_TYPE_GRASS and
-							PW_RandInt(1, 100) <= 20 * rainfall_map.data[i] ^ 2 + 10 then
+							PW_RandInt(1, 100) <= 20 * rainfall ^ 2 + 10 then
 						TerrainBuilder.SetFeatureType(plot, g_FEATURE_MARSH)
 					end
 				end
 
-				--if rainfall_map.data[i] < jungleThreshold then
+				--if rainfall < jungleThreshold then
 				--	local treeRange = jungleThreshold - zeroTreesThreshold
-				--	if rainfall_map.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
-				--		if temperature_map.data[i] > mc.treesMinTemperature then
+				--	if rainfall > PW_Rand() * treeRange + zeroTreesThreshold then
+				--		if temperature > mc.treesMinTemperature then
 				--			TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
 				--		end
 				--	end
 				--else
-				--	if temperature_map.data[i] < mc.jungleMinTemperature and temperature_map.data[i] > mc.treesMinTemperature then
+				--	if temperature < mc.jungleMinTemperature and temperature > mc.treesMinTemperature then
 				--		TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
-				--	elseif temperature_map.data[i] >= mc.jungleMinTemperature then
+				--	elseif temperature >= mc.jungleMinTemperature then
 				--		local tiles = GetCircle(i,1)
 				--		local desertCount = 0
 				--		for n=1,#tiles do
@@ -3800,6 +3802,10 @@ function PW_RectMap:WrapY()
 	return self.wrap_y_
 end
 
+function PW_RectMap:Matrix()
+	return self.matrix_
+end
+
 function PW_RectMap:HexExistsAt(x: number, y: number)
 	return (0 <= x and x < self:Width() or self:WrapX()) and (0 <= y and y < self:Height() or self:WrapY())
 end
@@ -4320,6 +4326,34 @@ function NormalizeData(array: table)
 			array[i] = (value - min) / range
 		end
 	end
+end
+
+--------------------------------------------------------------------------------
+
+function Percentile(frac: number, array: table, options: table)
+	if frac <= 0 then return -math.huge end
+	if frac > 1 then frac = 1 end
+
+	local copy = {}
+
+	if options.exclude_zeros then
+		for i = 1, #array do
+			local value: number = array[i]
+			if value ~= 0 then
+				copy[#copy + 1] = value
+			end
+		end
+	else
+		for i = 1, #array do
+			copy[i] = array[i]
+		end
+	end
+
+	if #copy == 0 then return -math.huge end
+
+	table.sort(copy)
+	local rank: number = math.ceil(frac * #copy)
+	return copy[rank]
 end
 
 -- #############################################################################
