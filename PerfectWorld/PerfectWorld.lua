@@ -2358,9 +2358,7 @@ function PW_GenerateRainfallMap(elevation_map)
 			if bottomY == -1 then
 				bottomY = 0
 			end
-			--print(string.format("topY = %d, bottomY = %d",topY,bottomY))
 			local dir1,dir2 = elevation_map:GetGeostrophicWindDirections(zone)
-			--print(string.format("zone = %d, dir1 = %d",zone,dir1))
 			if (dir1 == mc.SW) or (dir1 == mc.SE) then
 				yStart = topY
 				yStop = bottomY --- 1
@@ -2379,11 +2377,8 @@ function PW_GenerateRainfallMap(elevation_map)
 				xStop = elevation_map.width - 1
 				incX = 1
 			end
-			--print(string.format("yStart = %d, yStop = %d, incY = %d",yStart,yStop,incY))
-			--print(string.format("xStart = %d, xStop = %d, incX = %d",xStart,xStop,incX)
 
 			for y = yStart,yStop ,incY do
-				--print(string.format("y = %d",y))
 				--each line should start on water to avoid vast areas without rain
 				local xxStart = xStart
 				local xxStop = xStop
@@ -2403,28 +2398,25 @@ function PW_GenerateRainfallMap(elevation_map)
 			end
 		end
 	end
-	--table.sort(sortedGeoMap, function (a,b) return a[3] < b[3] end)
-	--print(#sortedGeoMap)
-	--print(#geoMap.data)
 
-	local rainfallSummerMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
-	local moistureMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
+	local rainfallSummerMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
+	local moistureMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
 	for i = 1,#sortedSummerMap,1 do
 		local x = sortedSummerMap[i][1]
 		local y = sortedSummerMap[i][2]
 		DistributeRain(x,y,elevation_map,temperature_map,summerMap,rainfallSummerMap,moistureMap,false)
 	end
 
-	local rainfallWinterMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
-	local moistureMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
+	local rainfallWinterMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
+	local moistureMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
 	for i = 1,#sortedWinterMap,1 do
 		local x = sortedWinterMap[i][1]
 		local y = sortedWinterMap[i][2]
 		DistributeRain(x,y,elevation_map,temperature_map,winterMap,rainfallWinterMap,moistureMap,false)
 	end
 
-	local rainfallGeostrophicMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
-	moistureMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
+	local rainfallGeostrophicMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
+	moistureMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
 	--print("----------------------------------------------------------------------------------------")
 	--print("--GEOSTROPHIC---------------------------------------------------------------------------")
 	--print("----------------------------------------------------------------------------------------")
@@ -2434,28 +2426,24 @@ function PW_GenerateRainfallMap(elevation_map)
 		DistributeRain(x,y,elevation_map,temperature_map,geoMap,rainfallGeostrophicMap,moistureMap,true)
 	end
 	--zero below sea level for proper percent threshold finding
-	i = 0
 	for y = 0,elevation_map.height - 1,1 do
 		for x = 0,elevation_map.width - 1,1 do
 			if elevation_map:IsBelowSeaLevel(x,y) then
-				rainfallSummerMap.data[i] = 0.0
-				rainfallWinterMap.data[i] = 0.0
-				rainfallGeostrophicMap.data[i] = 0.0
+				rainfallSummerMap:Reset(x, y)
+				rainfallWinterMap:Reset(x, y)
+				rainfallGeostrophicMap:Reset(x, y)
 			end
-			i=i+1
 		end
 	end
 
-	NormalizeData(rainfallSummerMap.data)
-	NormalizeData(rainfallWinterMap.data)
-	NormalizeData(rainfallGeostrophicMap.data)
+	NormalizeData(rainfallSummerMap:Matrix().data)
+	NormalizeData(rainfallWinterMap:Matrix().data)
+	NormalizeData(rainfallGeostrophicMap:Matrix().data)
 
 	local rainfall_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap })
-	i = 0
 	for y = 0,elevation_map.height - 1,1 do
 		for x = 0,elevation_map.width - 1,1 do
-			rainfall_map:Reset(x, y, rainfallSummerMap.data[i] + rainfallWinterMap.data[i] + (rainfallGeostrophicMap.data[i] * mc.geostrophicFactor))
-			i=i+1
+			rainfall_map:Reset(x, y, rainfallSummerMap:Get(x, y) + rainfallWinterMap:Get(x, y) + mc.geostrophicFactor * rainfallGeostrophicMap:Get(x, y))
 		end
 	end
 	NormalizeData(rainfall_map:Matrix().data)
@@ -2463,17 +2451,15 @@ function PW_GenerateRainfallMap(elevation_map)
 	return rainfall_map, temperature_map
 end
 -------------------------------------------------------------------------------------------
-function DistributeRain(x,y,elevation_map,temperature_map,pressureMap,rainfall_map,moistureMap,boolGeostrophic)
-
+function DistributeRain(x, y, elevation_map, temperature_map, pressureMap, rainfall_map, moistureMap, boolGeostrophic)
 	local i = elevation_map:GetIndex(x,y)
 	local upLiftSource = math.max(math.pow(pressureMap.data[i],mc.upLiftExponent),1.0 - temperature_map.data[i])
 	--local str = string.format("geo=%s,x=%d, y=%d, srcPressure uplift = %f, upliftSource = %f",tostring(boolGeostrophic),x,y,math.pow(pressureMap.data[i],mc.upLiftExponent),upLiftSource)
 	--print(str)
 	if elevation_map:IsBelowSeaLevel(x,y) then
-		moistureMap.data[i] = math.max(moistureMap.data[i], temperature_map.data[i])
+		moistureMap:Reset(x, y, math.max(moistureMap:Get(x, y), temperature_map.data[i]))
 		--print("water tile = true")
 	end
-	--print(string.format("moistureMap.data[i] = %f",moistureMap.data[i]))
 
 	--make list of neighbors
 	local nList = {}
@@ -2500,12 +2486,14 @@ function DistributeRain(x,y,elevation_map,temperature_map,pressureMap,rainfall_m
 			end
 		end
 	end
+
+	local moisture: number = moistureMap:Get(x, y)
 	if #nList == 0 or boolGeostrophic and #nList == 1 then
-		local cost = moistureMap.data[i]
-		rainfall_map.data[i] = cost
+		local cost = moisture
+		rainfall_map:Reset(x, y, cost)
 		return
 	end
-	local moisturePerNeighbor = moistureMap.data[i]/#nList
+	local moisturePerNeighbor = moisture/#nList
 	--drop rain and pass moisture to neighbors
 	for n = 1,#nList,1 do
 		local xx = nList[n][1]
@@ -2519,18 +2507,14 @@ function DistributeRain(x,y,elevation_map,temperature_map,pressureMap,rainfall_m
 		end
 		if boolGeostrophic and #nList == 2 then
 			if n == 1 then
-				moisturePerNeighbor = (1.0 - mc.geostrophicLateralWindStrength) * moistureMap.data[i]
+				moisturePerNeighbor = (1.0 - mc.geostrophicLateralWindStrength) * moisture
 			else
-				moisturePerNeighbor = mc.geostrophicLateralWindStrength * moistureMap.data[i]
+				moisturePerNeighbor = mc.geostrophicLateralWindStrength * moisture
 			end
 		end
-		--print(string.format("---xx=%d, yy=%d, destPressure uplift = %f, upLiftDest = %f, cost = %f, moisturePerNeighbor = %f, bonus = %f",xx,yy,math.pow(pressureMap.data[ii],mc.upLiftExponent),upLiftDest,cost,moisturePerNeighbor,bonus))
-		rainfall_map.data[i] = rainfall_map.data[i] + cost * moisturePerNeighbor + bonus
+		rainfall_map:Reset(x, y, rainfall_map:Get(x, y) + cost * moisturePerNeighbor + bonus)
 		--pass to neighbor.
-		--print(string.format("---moistureMap.data[ii] = %f",moistureMap.data[ii]))
-		moistureMap.data[ii] = moistureMap.data[ii] + moisturePerNeighbor - (cost * moisturePerNeighbor)
-		--print(string.format("---dropping %f rain",cost * moisturePerNeighbor + bonus))
-		--print(string.format("---passing on %f moisture",moisturePerNeighbor - (cost * moisturePerNeighbor)))
+		moistureMap:Reset(xx, yy, moistureMap:Get(xx, yy) + moisturePerNeighbor - cost * moisturePerNeighbor)
 	end
 
 end
