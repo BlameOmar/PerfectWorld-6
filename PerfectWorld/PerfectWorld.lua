@@ -2313,7 +2313,7 @@ end
 -------------------------------------------------------------------------------------------
 function PW_GenerateRainfallMap(elevation_map)
 	PW_Log("Generating Rainfall Map")
-	local summerMap,winterMap,temperature_map = GenerateTempMaps(elevation_map)
+	local summerMap, winterMap, temperature_map = GenerateTempMaps(elevation_map)
 	local geoMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	local i = 0
 	for y = 0,elevation_map.height - 1,1 do
@@ -2326,28 +2326,30 @@ function PW_GenerateRainfallMap(elevation_map)
 		end
 	end
 	NormalizeData(geoMap.data)
-	i = 0
-	local sortedSummerMap = {}
-	local sortedWinterMap = {}
-	for y = 0,elevation_map.height - 1,1 do
-		for x = 0,elevation_map.width - 1,1 do
-			sortedSummerMap[i + 1] = {x,y,summerMap.data[i]}
-			sortedWinterMap[i + 1] = {x,y,winterMap.data[i]}
-			i=i+1
+
+	-- Using the otherwise unused z component of PW_Vector to define the ordering.
+	local summer_map_order = {}
+	local winter_map_order = {}
+	for y = 0, elevation_map.height - 1 do
+		for x = 0, elevation_map.width - 1 do
+			local i = #summer_map_order
+			summer_map_order[i + 1] = PW_Vector3(x, y, summerMap.data[i])
+			winter_map_order[i + 1] = PW_Vector3(x, y, winterMap.data[i])
 		end
 	end
-	table.sort(sortedSummerMap, function (a,b) return a[3] < b[3] end)
-	table.sort(sortedWinterMap, function (a,b) return a[3] < b[3] end)
+	do
+		local compare = function (a, b) return a.z < b.z end
+		table.sort(summer_map_order, compare)
+		table.sort(winter_map_order, compare)
+	end
 
-	local sortedGeoMap = {}
+	local geo_map_order = {}
 	local xStart = 0
 	local xStop = 0
 	local yStart = 0
 	local yStop = 0
 	local incX = 0
 	local incY = 0
-	local geoIndex = 1
-	local str = ""
 	for zone=0,5,1 do
 		local topY = elevation_map:GetYFromZone(zone,true)
 		local bottomY = elevation_map:GetYFromZone(zone,false)
@@ -2392,131 +2394,109 @@ function PW_GenerateRainfallMap(elevation_map)
 				end
 				for x = xxStart,xxStop,incX do
 					local i = elevation_map:GetIndex(x,y)
-					sortedGeoMap[geoIndex] = {x,y,geoMap.data[i]}
-					geoIndex = geoIndex + 1
+					geo_map_order[#geo_map_order + 1] = PW_Vector2(x, y)
 				end
 			end
 		end
 	end
 
-	local rainfallSummerMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
-	local moistureMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
-	for i = 1,#sortedSummerMap,1 do
-		local x = sortedSummerMap[i][1]
-		local y = sortedSummerMap[i][2]
-		DistributeRain(x,y,elevation_map,temperature_map,summerMap,rainfallSummerMap,moistureMap,false)
+	local rainfall_summer_map = DistributeRain(elevation_map, temperature_map, summerMap, summer_map_order, false)
+	local rainfall_winter_map = DistributeRain(elevation_map, temperature_map, winterMap, winter_map_order, false)
+	local rainfall_geostrophic_map = DistributeRain(elevation_map, temperature_map, geoMap, geo_map_order, true)
+	local function rainfall(x: number, y: number)
+		return rainfall_summer_map:Get(x, y) + rainfall_winter_map:Get(x, y) + mc.geostrophicFactor * rainfall_geostrophic_map:Get(x, y)
 	end
-
-	local rainfallWinterMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
-	local moistureMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
-	for i = 1,#sortedWinterMap,1 do
-		local x = sortedWinterMap[i][1]
-		local y = sortedWinterMap[i][2]
-		DistributeRain(x,y,elevation_map,temperature_map,winterMap,rainfallWinterMap,moistureMap,false)
-	end
-
-	local rainfallGeostrophicMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
-	moistureMap = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
-	--print("----------------------------------------------------------------------------------------")
-	--print("--GEOSTROPHIC---------------------------------------------------------------------------")
-	--print("----------------------------------------------------------------------------------------")
-	for i = 1,#sortedGeoMap,1 do
-		local x = sortedGeoMap[i][1]
-		local y = sortedGeoMap[i][2]
-		DistributeRain(x,y,elevation_map,temperature_map,geoMap,rainfallGeostrophicMap,moistureMap,true)
-	end
-	--zero below sea level for proper percent threshold finding
-	for y = 0,elevation_map.height - 1,1 do
-		for x = 0,elevation_map.width - 1,1 do
-			if elevation_map:IsBelowSeaLevel(x,y) then
-				rainfallSummerMap:Reset(x, y)
-				rainfallWinterMap:Reset(x, y)
-				rainfallGeostrophicMap:Reset(x, y)
-			end
-		end
-	end
-
-	NormalizeData(rainfallSummerMap:Matrix().data)
-	NormalizeData(rainfallWinterMap:Matrix().data)
-	NormalizeData(rainfallGeostrophicMap:Matrix().data)
 
 	local rainfall_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap })
-	for y = 0,elevation_map.height - 1,1 do
-		for x = 0,elevation_map.width - 1,1 do
-			rainfall_map:Reset(x, y, rainfallSummerMap:Get(x, y) + rainfallWinterMap:Get(x, y) + mc.geostrophicFactor * rainfallGeostrophicMap:Get(x, y))
-		end
-	end
+	rainfall_map:FillWith(rainfall)
 	NormalizeData(rainfall_map:Matrix().data)
 
 	return rainfall_map, temperature_map
 end
 -------------------------------------------------------------------------------------------
-function DistributeRain(x, y, elevation_map, temperature_map, pressureMap, rainfall_map, moistureMap, boolGeostrophic)
-	local i = elevation_map:GetIndex(x,y)
-	local upLiftSource = math.max(math.pow(pressureMap.data[i],mc.upLiftExponent),1.0 - temperature_map.data[i])
-	--local str = string.format("geo=%s,x=%d, y=%d, srcPressure uplift = %f, upliftSource = %f",tostring(boolGeostrophic),x,y,math.pow(pressureMap.data[i],mc.upLiftExponent),upLiftSource)
-	--print(str)
-	if elevation_map:IsBelowSeaLevel(x,y) then
-		moistureMap:Reset(x, y, math.max(moistureMap:Get(x, y), temperature_map.data[i]))
-		--print("water tile = true")
-	end
+function DistributeRain(elevation_map: table, temperature_map: table, pressureMap: table, hexes: table, geostrophic: boolean)
+	local rainfall_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
+	local moisture_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
 
-	--make list of neighbors
-	local nList = {}
-	if boolGeostrophic then
-		local zone = elevation_map:GetZone(y)
-		local dir1,dir2 = elevation_map:GetGeostrophicWindDirections(zone)
-		local x1,y1 = elevation_map:GetNeighbor(x,y,dir1)
-		local ii = elevation_map:GetIndex(x1,y1)
-		--neighbor must be on map and in same wind zone
-		if ii >= 0 and (elevation_map:GetZone(y1) == elevation_map:GetZone(y)) then
-			table.insert(nList,{x1,y1})
+	for h = 1, #hexes do
+		local x = hexes[h].x
+		local y = hexes[h].y
+
+		local i = elevation_map:GetIndex(x,y)
+		local upLiftSource = math.max(math.pow(pressureMap.data[i],mc.upLiftExponent),1.0 - temperature_map.data[i])
+		if elevation_map:IsBelowSeaLevel(x,y) then
+			moisture_map:Reset(x, y, math.max(moisture_map:Get(x, y), temperature_map.data[i]))
 		end
-		local x2,y2 = elevation_map:GetNeighbor(x,y,dir2)
-		ii = elevation_map:GetIndex(x2,y2)
-		if ii >= 0 then
-			table.insert(nList,{x2,y2})
+
+		--make list of neighbors
+		local nList = {}
+		if geostrophic then
+			local zone = elevation_map:GetZone(y)
+			local dir1,dir2 = elevation_map:GetGeostrophicWindDirections(zone)
+			local x1,y1 = elevation_map:GetNeighbor(x,y,dir1)
+			local ii = elevation_map:GetIndex(x1,y1)
+			--neighbor must be on map and in same wind zone
+			if ii >= 0 and (elevation_map:GetZone(y1) == elevation_map:GetZone(y)) then
+				table.insert(nList,{x1,y1})
+			end
+			local x2,y2 = elevation_map:GetNeighbor(x,y,dir2)
+			ii = elevation_map:GetIndex(x2,y2)
+			if ii >= 0 then
+				table.insert(nList,{x2,y2})
+			end
+		else
+			for dir = 1,6,1 do
+				local xx,yy = elevation_map:GetNeighbor(x,y,dir)
+				local ii = elevation_map:GetIndex(xx,yy)
+				if ii >= 0 and pressureMap.data[i] <= pressureMap.data[ii] then
+					table.insert(nList,{xx,yy})
+				end
+			end
 		end
-	else
-		for dir = 1,6,1 do
-			local xx,yy = elevation_map:GetNeighbor(x,y,dir)
-			local ii = elevation_map:GetIndex(xx,yy)
-			if ii >= 0 and pressureMap.data[i] <= pressureMap.data[ii] then
-				table.insert(nList,{xx,yy})
+
+		local moisture: number = moisture_map:Get(x, y)
+		if #nList == 0 or geostrophic and #nList == 1 then
+			local cost = moisture
+			rainfall_map:Reset(x, y, cost)
+		else
+			local moisturePerNeighbor = moisture/#nList
+			--drop rain and pass moisture to neighbors
+			for n = 1,#nList,1 do
+				local xx = nList[n][1]
+				local yy = nList[n][2]
+				local ii = elevation_map:GetIndex(xx,yy)
+				local upLiftDest = math.max(math.pow(pressureMap.data[ii],mc.upLiftExponent),1.0 - temperature_map.data[ii])
+				local cost = GetRainCost(upLiftSource,upLiftDest)
+				local bonus = 0.0
+				if (elevation_map:GetZone(y) == mc.NPOLAR or elevation_map:GetZone(y) == mc.SPOLAR) then
+					bonus = mc.polarRainBoost
+				end
+				if geostrophic and #nList == 2 then
+					if n == 1 then
+						moisturePerNeighbor = (1.0 - mc.geostrophicLateralWindStrength) * moisture
+					else
+						moisturePerNeighbor = mc.geostrophicLateralWindStrength * moisture
+					end
+				end
+				rainfall_map:Reset(x, y, rainfall_map:Get(x, y) + cost * moisturePerNeighbor + bonus)
+				--pass to neighbor.
+				moisture_map:Reset(xx, yy, moisture_map:Get(xx, yy) + moisturePerNeighbor - cost * moisturePerNeighbor)
 			end
 		end
 	end
 
-	local moisture: number = moistureMap:Get(x, y)
-	if #nList == 0 or boolGeostrophic and #nList == 1 then
-		local cost = moisture
-		rainfall_map:Reset(x, y, cost)
-		return
-	end
-	local moisturePerNeighbor = moisture/#nList
-	--drop rain and pass moisture to neighbors
-	for n = 1,#nList,1 do
-		local xx = nList[n][1]
-		local yy = nList[n][2]
-		local ii = elevation_map:GetIndex(xx,yy)
-		local upLiftDest = math.max(math.pow(pressureMap.data[ii],mc.upLiftExponent),1.0 - temperature_map.data[ii])
-		local cost = GetRainCost(upLiftSource,upLiftDest)
-		local bonus = 0.0
-		if (elevation_map:GetZone(y) == mc.NPOLAR or elevation_map:GetZone(y) == mc.SPOLAR) then
-			bonus = mc.polarRainBoost
-		end
-		if boolGeostrophic and #nList == 2 then
-			if n == 1 then
-				moisturePerNeighbor = (1.0 - mc.geostrophicLateralWindStrength) * moisture
-			else
-				moisturePerNeighbor = mc.geostrophicLateralWindStrength * moisture
+	--zero below sea level for proper percent threshold finding
+	for y = 0, elevation_map.height - 1 do
+		for x = 0, elevation_map.width - 1 do
+			if elevation_map:IsBelowSeaLevel(x,y) then
+				rainfall_map:Reset(x, y)
 			end
 		end
-		rainfall_map:Reset(x, y, rainfall_map:Get(x, y) + cost * moisturePerNeighbor + bonus)
-		--pass to neighbor.
-		moistureMap:Reset(xx, yy, moistureMap:Get(xx, yy) + moisturePerNeighbor - cost * moisturePerNeighbor)
 	end
 
+	NormalizeData(rainfall_map:Matrix().data)
+
+	return rainfall_map
 end
 -------------------------------------------------------------------------------------------
 function GetRainCost(upLiftSource,upLiftDest)
@@ -3457,6 +3437,14 @@ function PW_Vector.__eq(u: PW_Vector, v: PW_Vector)
 	return u.x == v.x and u.y == v.y and u.z == v.z
 end
 
+function PW_Vector2(x: number, y:number)
+	return PW_Vector:New2(x, y)
+end
+
+function PW_Vector3(x: number, y:number, z:number)
+	return PW_Vector:New3(x, y, z)
+end
+
 --------------------------------------------------------------------------------
 -- PW_Directions
 --------------------------------------------------------------------------------
@@ -3508,9 +3496,9 @@ PW_Directions = {
 --    /+z              |
 ---------------------------------------------------------------------------------
 
--- Another way to spell `PW_Vector:New3`.
+-- Another way to spell `PW_Vector3`.
 function PW_CubeHex(x: number, y: number, z: number)
-	return PW_Vector:New3(x, y, z)
+	return PW_Vector3(x, y, z)
 end
 
 -- Converts from cube coordinates to offset rectangular coordinates, A.K.A. Civ 6 coordinates.
@@ -3640,9 +3628,9 @@ end
 --                     |
 --------------------------------------------------------------------------------
 
--- Another way to spell `PW_Vector:New2`.
+-- Another way to spell `PW_Vector2`.
 function PW_RectHex(x: number, y: number)
-	return PW_Vector:New2(x, y)
+	return PW_Vector2(x, y)
 end
 
 -- Converts to cube coordinates.
