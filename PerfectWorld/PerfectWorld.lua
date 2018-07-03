@@ -69,27 +69,33 @@ PW_Tests = {}
 --------------------------------------------------------------------------------
 -- The entry point into the map script.
 --------------------------------------------------------------------------------
-local g_Width, g_Height
-local g_PlotTypesMap
-local g_TerrainTypesMap
+local g_ElevationMap
 function GenerateMap()
 	if g_RunTests then PW_RunAllTests() end
 
+	PW_RandSeed()
 	PW_Log("Generating Map")
 	local time = os.clock()
-
 	-- Set globals
-	g_Width, g_Height = Map.GetGridSize()
-	g_PlotTypesMap = PW_RectMap:New(g_Width, g_Height, { wrap_x = true, wrap_y = false, default_value = g_PLOT_TYPE_NONE })
-	g_TerrainTypesMap = PW_RectMap:New(g_Width, g_Height, { wrap_x = true,  wrap_y = false, default_value = g_TERRAIN_TYPE_NONE })
+	mc = MapConstants:New()
 
-	PW_RandSeed()
-	PWGeneratePlotTypes()
-	PWGenerateTerrainTypes()
-	ApplyTerrain(g_PlotTypesMap, g_TerrainTypesMap)
-	AddRivers()
-	AddFeatures()
-	-- Cleanup()
+	local width, height = Map.GetGridSize()
+
+	g_ElevationMap = GenerateElevationMap(width, height, true, false)
+	ShiftMaps();
+
+	local diff_map = GenerateDiffMap(width, height, true, false)
+	local plot_types_map = PW_GeneratePlotTypes(g_ElevationMap, diff_map)
+	local rainfall_map, temperature_map = PW_GenerateRainfallMap(g_ElevationMap)
+	local river_map = PW_GenerateRiverMap(g_ElevationMap, rainfall_map)
+	local terrain_types_map = PW_GenerateTerrainTypes(g_ElevationMap, plot_types_map, rainfall_map, temperature_map)
+
+	ApplyTerrain(plot_types_map, terrain_types_map)
+	-- TODO(omar): Remove dependency on terrain map
+	AddRivers(river_map, terrain_types_map)
+	-- TODO(omar): Remove dependencies on plot and terrain maps.
+	AddFeatures(rainfall_map, temperature_map, plot_types_map, terrain_types_map)
+	-- Cleanup(diff_map, temperature_map)
 
 --	local args = {
 --		numberToPlace = GameInfo.Maps[Map.GetMapSize()].NumNaturalWonders,
@@ -121,7 +127,7 @@ function GenerateMap()
 	};
 	local start_plot_database = AssignStartingPlots.Create(args)
 
-	local GoodyGen = AddGoodies(g_Width, g_Height);
+	local GoodyGen = AddGoodies(width, height);
 
 	PW_Log(string.format("Generated map in %.3f seconds.", os.clock() - time))
 end
@@ -390,21 +396,17 @@ end
 
 function ApplyTerrain(plotTypes, terrainTypes)
 	PW_Log("Applying terrain")
-	for y = 0, g_Height - 1 do
-		for x = 0, g_Width - 1 do
+	for y = 0, plotTypes:Height() - 1 do
+		for x = 0, plotTypes:Width() - 1 do
 			local plot = Map.GetPlot(x, y)
-			local plot_type = g_PlotTypesMap:Get(x, y)
-			local terrain_type = g_TerrainTypesMap:Get(x, y)
+			local plot_type = plotTypes:Get(x, y)
+			local terrain_type = terrainTypes:Get(x, y)
 
 			ApplyTerrainToPlot(plot, plot_type, terrain_type)
 		end
 	end
 end
 
-local g_ElevationMap
-local g_RiverMap
-local g_RainfallMap
-local g_TemperatureMap
 --Global lookup tables used to track land, and terrain type. Used throughout terrain placement, Cleanup, and feature placement. -Bobert13
 local g_DesertTab = {}
 local g_SnowTab = {}
@@ -412,44 +414,32 @@ local g_TundraTab = {}
 local g_PlainsTab = {}
 local g_GrassTab = {}
 local g_LandTab = {}
-function PWGeneratePlotTypes()
-	-- This function uses lots of globals.
-
-	PW_Log("Creating initial map data")
-	local W,H = Map.GetGridSize()
-	--first do all the preliminary calculations in this function
-	PW_Log(string.format("Map size: width=%d, height=%d",W,H))
-	mc = MapConstants:New()
-
-	g_ElevationMap = GenerateElevationMap(W,H,true,false)
-	
-	--now gen plot types
+function PW_GeneratePlotTypes(elevation_map, diff_map)
 	PW_Log("Generating plot types")
-	ShiftMaps();
 
-	g_DiffMap = GenerateDiffMap(W,H,true,false);
+	local plot_types_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = true, wrap_y = false, default_value = g_PLOT_TYPE_NONE })
 
 	--find exact thresholds
-	local hills_threshold = g_DiffMap:FindThresholdFromPercent(mc.hillsPercent,false,true)
-	local mountains_threshold = g_DiffMap:FindThresholdFromPercent(mc.mountainsPercent,false,true)
+	local hills_threshold = diff_map:FindThresholdFromPercent(mc.hillsPercent,false,true)
+	local mountains_threshold = diff_map:FindThresholdFromPercent(mc.mountainsPercent,false,true)
 	local mountain_hexes = {}
 	local i = 0
-	for y = 0, H - 1,1 do
-		for x = 0,W - 1,1 do
-			if g_ElevationMap:IsBelowSeaLevel(x,y) then
-				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_OCEAN)
-			elseif g_DiffMap.data[i] < hills_threshold then
-				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_LAND)
+	for y = 0, plot_types_map:Height() - 1 do
+		for x = 0, plot_types_map:Width() - 1 do
+			if elevation_map:IsBelowSeaLevel(x,y) then
+				plot_types_map:Reset(x, y, g_PLOT_TYPE_OCEAN)
+			elseif diff_map.data[i] < hills_threshold then
+				plot_types_map:Reset(x, y, g_PLOT_TYPE_LAND)
 				g_LandTab[#g_LandTab + 1] = i
-			elseif g_DiffMap.data[i] < mountains_threshold then
-				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_HILLS)
+			elseif diff_map.data[i] < mountains_threshold then
+				plot_types_map:Reset(x, y, g_PLOT_TYPE_HILLS)
 				g_LandTab[#g_LandTab + 1] = i
 			else
-				g_PlotTypesMap:Reset(x, y, g_PLOT_TYPE_MOUNTAIN)
+				plot_types_map:Reset(x, y, g_PLOT_TYPE_MOUNTAIN)
 				g_LandTab[#g_LandTab + 1] = i
 				mountain_hexes[#mountain_hexes + 1] = PW_RectHex(x, y)
 			end
-			i=i+1
+			i = i + 1
 		end
 	end
 
@@ -457,44 +447,41 @@ function PWGeneratePlotTypes()
 	local mountains_to_erode = {}
 	for i = 1, #mountain_hexes do
 		local hex = mountain_hexes[i]
-		if not g_PlotTypesMap:HasAdjacentMatching(hex.x, hex.y, {g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS}) and g_PlotTypesMap:HasAdjacentMatching(hex.x, hex.y, {g_PLOT_TYPE_OCEAN}) then
+		if not plot_types_map:HasAdjacentMatching(hex.x, hex.y, {g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS}) and plot_types_map:HasAdjacentMatching(hex.x, hex.y, {g_PLOT_TYPE_OCEAN}) then
 			table.insert(mountains_to_erode, hex)
 		end
 	end
 	for i = 1, #mountains_to_erode do
 		local hex = mountains_to_erode[i]
 		if PW_RandInt(1,3) == 1 then
-			g_PlotTypesMap:Reset(hex.x, hex.y, g_PLOT_TYPE_LAND)
+			plot_types_map:Reset(hex.x, hex.y, g_PLOT_TYPE_LAND)
 		else
-			g_PlotTypesMap:Reset(hex.x, hex.y, g_PLOT_TYPE_HILLS)
+			plot_types_map:Reset(hex.x, hex.y, g_PLOT_TYPE_HILLS)
 		end
 	end
-	
-	g_RainfallMap, g_TemperatureMap = GenerateRainfallMap(g_ElevationMap)
-	g_RiverMap = RiverMap:New(g_ElevationMap)
-	g_RiverMap:SetJunctionAltitudes()
-	g_RiverMap:SiltifyLakes()
-	g_RiverMap:SetFlowDestinations()
-	g_RiverMap:SetRiverSizes(g_RainfallMap)
+
+	return plot_types_map
 end
 
-function PWGenerateTerrainTypes()
+function PW_GenerateTerrainTypes(elevation_map, plot_types_map, rainfall_map, temperature_map)
 	PW_Log("Generating terrain")
+
+	local terrain_types_map = PW_RectMap:New(plot_types_map:Width(), plot_types_map:Height(), { wrap_x = true,  wrap_y = false, default_value = g_TERRAIN_TYPE_NONE })
 
 	--find exact thresholds
 	-- TODO(omar): Make coast generation less magical.
-	local coastsThreshold = g_ElevationMap:FindThresholdFromPercent(0.3, false, false)
-	local desertThreshold = g_RainfallMap:FindThresholdFromPercent(mc.desertPercent,false,true)
-	local plainsThreshold = g_RainfallMap:FindThresholdFromPercent(mc.plainsPercent,false,true)
+	local coastsThreshold = elevation_map:FindThresholdFromPercent(0.3, false, false)
+	local desertThreshold = rainfall_map:FindThresholdFromPercent(mc.desertPercent,false,true)
+	local plainsThreshold = rainfall_map:FindThresholdFromPercent(mc.plainsPercent,false,true)
 
 	PW_Log("Creating coastlines")
-	for y = 0, g_PlotTypesMap:Height() - 1 do
-		for x = 0, g_PlotTypesMap:Width() - 1 do
-			if g_PlotTypesMap:Get(x, y) == g_PLOT_TYPE_OCEAN then
-				if g_PlotTypesMap:HasAdjacentMatching(x, y, {g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS, g_PLOT_TYPE_MOUNTAIN}) then
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_COAST)
+	for y = 0, plot_types_map:Height() - 1 do
+		for x = 0, plot_types_map:Width() - 1 do
+			if plot_types_map:Get(x, y) == g_PLOT_TYPE_OCEAN then
+				if plot_types_map:HasAdjacentMatching(x, y, {g_PLOT_TYPE_LAND, g_PLOT_TYPE_HILLS, g_PLOT_TYPE_MOUNTAIN}) then
+					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_COAST)
 				else
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_OCEAN)
+					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_OCEAN)
 				end
 			end
 		end
@@ -503,11 +490,11 @@ function PWGenerateTerrainTypes()
 	PW_Log("Expanding coasts")
 	for _ = 1, 2 do
 		local new_coasts = {}
-		for y = 0, g_TerrainTypesMap:Height() - 1 do
-			for x = 0, g_TerrainTypesMap:Width() - 1 do
-				if g_TerrainTypesMap:Get(x, y) == g_TERRAIN_TYPE_OCEAN then
+		for y = 0, terrain_types_map:Height() - 1 do
+			for x = 0, terrain_types_map:Width() - 1 do
+				if terrain_types_map:Get(x, y) == g_TERRAIN_TYPE_OCEAN then
 					local hex = PW_RectHex(x, y)
-					if g_ElevationMap.data[g_ElevationMap:GetIndex(x, y)] < coastsThreshold and g_TerrainTypesMap:HasAdjacentMatching(x, y, {g_TERRAIN_TYPE_COAST}) then
+					if elevation_map.data[elevation_map:GetIndex(x, y)] < coastsThreshold and terrain_types_map:HasAdjacentMatching(x, y, {g_TERRAIN_TYPE_COAST}) then
 						table.insert(new_coasts, hex)
 					end
 				end
@@ -516,60 +503,74 @@ function PWGenerateTerrainTypes()
 
 		for i = 1, #new_coasts do
 			local hex = new_coasts[i]
-			g_TerrainTypesMap:Reset(hex.x, hex.y, g_TERRAIN_TYPE_COAST)
+			terrain_types_map:Reset(hex.x, hex.y, g_TERRAIN_TYPE_COAST)
 		end
 	end
 	-- Fill in any coastal "holes"
-	for y = 0, g_TerrainTypesMap:Height() - 1 do
-		for x = 0, g_TerrainTypesMap:Width() - 1 do
-			if g_TerrainTypesMap:Get(x, y) == g_TERRAIN_TYPE_OCEAN then
+	for y = 0, terrain_types_map:Height() - 1 do
+		for x = 0, terrain_types_map:Width() - 1 do
+			if terrain_types_map:Get(x, y) == g_TERRAIN_TYPE_OCEAN then
 				local hex = PW_RectHex(x, y)
-				if g_TerrainTypesMap:CountAdjacentMatching(x, y, {g_TERRAIN_TYPE_COAST}) == 6 then
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_COAST)
+				if terrain_types_map:CountAdjacentMatching(x, y, {g_TERRAIN_TYPE_COAST}) == 6 then
+					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_COAST)
 				end
 			end
 		end
 	end
 
 	local i = 0
-	for y = 0, g_PlotTypesMap:Height() - 1 do
-		for x = 0, g_PlotTypesMap:Width() - 1 do
-			local plot_type = g_PlotTypesMap:Get(x, y)
+	for y = 0, plot_types_map:Height() - 1 do
+		for x = 0, plot_types_map:Width() - 1 do
+			local plot_type = plot_types_map:Get(x, y)
 			if plot_type ~= g_PLOT_TYPE_OCEAN then -- Land
-				if g_TemperatureMap.data[i] < mc.snowTemperature then
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_SNOW)
+				if temperature_map.data[i] < mc.snowTemperature then
+					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_SNOW)
 					g_SnowTab[#g_SnowTab + 1] = i
-				elseif g_TemperatureMap.data[i] < mc.tundraTemperature then
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_TUNDRA)
+				elseif temperature_map.data[i] < mc.tundraTemperature then
+					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_TUNDRA)
 					g_TundraTab[#g_TundraTab + 1] = i
-				elseif g_RainfallMap.data[i] < desertThreshold then
-					if g_TemperatureMap.data[i] < mc.desertMinTemperature then
-						g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
+				elseif rainfall_map.data[i] < desertThreshold then
+					if temperature_map.data[i] < mc.desertMinTemperature then
+						terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
 						g_PlainsTab[#g_PlainsTab + 1] = i
 					else
-						g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_DESERT)
+						terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_DESERT)
 						g_DesertTab[#g_DesertTab + 1] = i
 					end
-				elseif g_RainfallMap.data[i] < plainsThreshold then
-					if g_RainfallMap.data[i] < (PW_Rand() * (plainsThreshold - desertThreshold) + plainsThreshold - desertThreshold)/2.0 + desertThreshold then
-						g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
+				elseif rainfall_map.data[i] < plainsThreshold then
+					if rainfall_map.data[i] < (PW_Rand() * (plainsThreshold - desertThreshold) + plainsThreshold - desertThreshold)/2.0 + desertThreshold then
+						terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_PLAINS)
 						g_PlainsTab[#g_PlainsTab + 1] = i
 					else
-						g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_GRASS)
+						terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_GRASS)
 						g_GrassTab[#g_GrassTab + 1] = i
 					end
 				else
-					g_TerrainTypesMap:Reset(x, y, g_TERRAIN_TYPE_GRASS)
+					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_GRASS)
 					g_GrassTab[#g_GrassTab + 1] = i
 				end
 			end
 			i = i + 1
 		end
 	end
+
+	return terrain_types_map
 end
+
+function PW_GenerateRiverMap(elevation_map, rainfall_map)
+	local river_map = RiverMap:New(elevation_map)
+	river_map:SetJunctionAltitudes()
+	river_map:SiltifyLakes()
+	river_map:SetFlowDestinations()
+	river_map:SetRiverSizes(rainfall_map)
+
+	return river_map
+end
+
 --------------------------------------------------------------------------------
 function LatitudeAtY(y)
-	return (y / (g_Height - 1)) * (mc.topLatitude - mc.bottomLatitude) + mc.bottomLatitude
+	local _, height = Map.GetGridSize()
+	return (y / (height - 1)) * (mc.topLatitude - mc.bottomLatitude) + mc.bottomLatitude
 end
 --------------------------------------------------------------------------------
 --Interpolation and Perlin functions
@@ -2351,7 +2352,7 @@ function GenerateTempMaps(elevation_map)
 	return summerMap,winterMap,temperature_map
 end
 -------------------------------------------------------------------------------------------
-function GenerateRainfallMap(elevation_map)
+function PW_GenerateRainfallMap(elevation_map)
 	PW_Log("Generating Rainfall Map")
 	local summerMap,winterMap,temperature_map = GenerateTempMaps(elevation_map)
 	local geoMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
@@ -2675,23 +2676,6 @@ function PlacePossibleOasis()
 	print(string.format("Placed %d Oases. - PerfectWorld3",oasisTotal))
 end
 -------------------------------------------------------------------------------------------
-function PlacePossibleIce(i,W)
-	local plot = Map.GetPlotByIndex(i)
-	local x = i%W
-	local y = (i-x)/W
-	if plot:IsWater() then
-		local temp = g_TemperatureMap.data[i]
-		local latitude = LatitudeAtY(y)
-		--local randval = PW_Rand() * (mc.iceMaxTemperature - mc.minWaterTemp) + mc.minWaterTemp * 2
-		local randvalNorth = PW_Rand() * (mc.iceNorthLatitudeLimit - mc.topLatitude) + mc.topLatitude - 3
-		local randvalSouth = PW_Rand() * (mc.bottomLatitude - mc.iceSouthLatitudeLimit) + mc.iceSouthLatitudeLimit + 3
-		--print(string.format("lat = %f, randvalNorth = %f, randvalSouth = %f",latitude,randvalNorth,randvalSouth))
-		if latitude > randvalNorth  or latitude < randvalSouth then
-			TerrainBuilder.SetFeatureType(plot, g_FEATURE_ICE);
-		end
-	end
-end
--------------------------------------------------------------------------------------------
 function GetMapInitData(world_size)
 	local world_sizes = {
 		[GameInfo.Worlds.WORLDSIZE_DUEL.ID] = {42, 26},
@@ -2808,7 +2792,7 @@ function DetermineXShift()
 	return x_shift;
 end
 ------------------------------------------------------------------------------
---Seperated this from PWGeneratePlotTypes() to use it in other functions. -Bobert13
+--Seperated this from PW_GeneratePlotTypes() to use it in other functions. -Bobert13
 
 function GenerateDiffMap(width,height,xWrap,yWrap)
 	diff_map = FloatMap:New(width,height,xWrap,yWrap)
@@ -2905,7 +2889,7 @@ function AddLakes()
 	end
 end
 ------------------------------------------------------------------------------
-function Cleanup()	
+function Cleanup(diff_map, temperature_map)
 	--now we fix things up so that the border of tundra and ice regions are hills
 	--this looks a bit more believable. Also keep desert away from tundra and ice
 	--by turning it into plains
@@ -3093,7 +3077,7 @@ function Cleanup()
 		local i = g_LandTab[k]
 		local plot = Map.GetPlotByIndex(i)
 		if not plot:IsMountain() then
-			if g_TemperatureMap.data[i] > mc.treesMinTemperature then
+			if temperature_map.data[i] > mc.treesMinTemperature then
 				if plot:IsCoastalLand() then
 					if plot:IsRiver() then
 						if plot:GetTerrainType() ~= terrainDesert then
@@ -3106,7 +3090,7 @@ function Cleanup()
 						end
 					end
 				end
-				if g_DiffMap.data[i] < marshThreshold then
+				if diff_map.data[i] < marshThreshold then
 					local tiles = GetCircle(i,1)
 					local marsh = true
 					for n=1,#tiles do
@@ -3134,25 +3118,31 @@ function Cleanup()
 	PlacePossibleOasis()
 end
 ------------------------------------------------------------------------------
-function AddFeatures()
+function AddFeatures(rainfall_map, temperature_map, plot_types_map, terrain_types_map)
 	PW_Log("Adding Features");
 	local W, H = Map.GetGridSize()
 	local WH = W*H
 
-	local zeroTreesThreshold = g_RainfallMap:FindThresholdFromPercent(mc.zeroTreesPercent,false,true)
-	local jungleThreshold = g_RainfallMap:FindThresholdFromPercent(mc.junglePercent,false,true)
-	--local marshThreshold = g_RainfallMap:FindThresholdFromPercent(marshPercent,false,true)
+	local zeroTreesThreshold = rainfall_map:FindThresholdFromPercent(mc.zeroTreesPercent,false,true)
+	local jungleThreshold = rainfall_map:FindThresholdFromPercent(mc.junglePercent,false,true)
+	--local marshThreshold = rainfall_map:FindThresholdFromPercent(marshPercent,false,true)
 
 	local i = 0
 	for y = 0, H - 1 do
 		for x = 0, W - 1 do
 			local plot = Map.GetPlotByIndex(i)
 			if plot:IsWater() then
-				PlacePossibleIce(i,W)
+				local temp = temperature_map.data[i]
+				local latitude = LatitudeAtY(y)
+				local randvalNorth = PW_Rand() * (mc.iceNorthLatitudeLimit - mc.topLatitude) + mc.topLatitude - 3
+				local randvalSouth = PW_Rand() * (mc.bottomLatitude - mc.iceSouthLatitudeLimit) + mc.iceSouthLatitudeLimit + 3
+				if latitude > randvalNorth  or latitude < randvalSouth then
+					TerrainBuilder.SetFeatureType(plot, g_FEATURE_ICE);
+				end
 			elseif not plot:IsMountain() then
 				-- plot is hills or flat land
-				local plot_type = g_PlotTypesMap:Get(x, y)
-				local flat_terrain_type = g_TerrainTypesMap:Get(x, y)
+				local plot_type = plot_types_map:Get(x, y)
+				local flat_terrain_type = terrain_types_map:Get(x, y)
 
 				if plot:GetTerrainType() == g_TERRAIN_TYPE_DESERT then
 					if plot:IsRiver() then
@@ -3160,38 +3150,38 @@ function AddFeatures()
 					else
 						-- TODO: Place Oasis
 					end
-				elseif g_RainfallMap.data[i] >= jungleThreshold then -- Placing trees / marshes.
-					if g_TemperatureMap.data[i] >= mc.jungleMinTemperature then
+				elseif rainfall_map.data[i] >= jungleThreshold then -- Placing trees / marshes.
+					if temperature_map.data[i] >= mc.jungleMinTemperature then
 						TerrainBuilder.SetFeatureType(plot, g_FEATURE_JUNGLE)
 						ApplyTerrainToPlot(plot, plot_type, g_TERRAIN_TYPE_PLAINS)
-					elseif g_TemperatureMap.data[i] >= mc.treesMinTemperature then
+					elseif temperature_map.data[i] >= mc.treesMinTemperature then
 						TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
 					end
-				elseif g_RainfallMap.data[i] >= zeroTreesThreshold then
+				elseif rainfall_map.data[i] >= zeroTreesThreshold then
 					-- There can be forests and marshes.
 					-- local treeRange = jungleThreshold - zeroTreesThreshold
-					if g_TemperatureMap.data[i] > mc.treesMinTemperature and
-							PW_RandInt(1, 100) <= 30 * g_RainfallMap.data[i] ^ 2 + 60 then
-					--if g_TemperatureMap.data[i] > mc.treesMinTemperature and
-					--		g_RainfallMap.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
+					if temperature_map.data[i] > mc.treesMinTemperature and
+							PW_RandInt(1, 100) <= 30 * rainfall_map.data[i] ^ 2 + 60 then
+					--if temperature_map.data[i] > mc.treesMinTemperature and
+					--		rainfall_map.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
 						TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
 					elseif plot:GetTerrainType() == g_TERRAIN_TYPE_GRASS and
-							PW_RandInt(1, 100) <= 20 * g_RainfallMap.data[i] ^ 2 + 10 then
+							PW_RandInt(1, 100) <= 20 * rainfall_map.data[i] ^ 2 + 10 then
 						TerrainBuilder.SetFeatureType(plot, g_FEATURE_MARSH)
 					end
 				end
 
-				--if g_RainfallMap.data[i] < jungleThreshold then
+				--if rainfall_map.data[i] < jungleThreshold then
 				--	local treeRange = jungleThreshold - zeroTreesThreshold
-				--	if g_RainfallMap.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
-				--		if g_TemperatureMap.data[i] > mc.treesMinTemperature then
+				--	if rainfall_map.data[i] > PW_Rand() * treeRange + zeroTreesThreshold then
+				--		if temperature_map.data[i] > mc.treesMinTemperature then
 				--			TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
 				--		end
 				--	end
 				--else
-				--	if g_TemperatureMap.data[i] < mc.jungleMinTemperature and g_TemperatureMap.data[i] > mc.treesMinTemperature then
+				--	if temperature_map.data[i] < mc.jungleMinTemperature and temperature_map.data[i] > mc.treesMinTemperature then
 				--		TerrainBuilder.SetFeatureType(plot, g_FEATURE_FOREST)
-				--	elseif g_TemperatureMap.data[i] >= mc.jungleMinTemperature then
+				--	elseif temperature_map.data[i] >= mc.jungleMinTemperature then
 				--		local tiles = GetCircle(i,1)
 				--		local desertCount = 0
 				--		for n=1,#tiles do
@@ -3219,15 +3209,15 @@ function AddFeatures()
 	end
 end
 -------------------------------------------------------------------------------------------
-function AddRivers()
+function AddRivers(river_map, terrain_types_map)
 	PW_Log("Adding Rivers")
 	local gridWidth, gridHeight = Map.GetGridSize();
 	for y = 0, gridHeight - 1,1 do
 		for x = 0,gridWidth - 1,1 do
 			local plot = Map.GetPlot(x,y)
-			local flat_terrain_type = g_TerrainTypesMap:Get(x,y)
+			local flat_terrain_type = terrain_types_map:Get(x,y)
 
-			local WOfRiver, NWOfRiver, NEOfRiver = g_RiverMap:GetFlowDirections(x,y)
+			local WOfRiver, NWOfRiver, NEOfRiver = river_map:GetFlowDirections(x,y)
 
 			if WOfRiver == FlowDirectionTypes.NO_FLOWDIRECTION then
 				TerrainBuilder.SetWOfRiver(plot, false, WOfRiver);
