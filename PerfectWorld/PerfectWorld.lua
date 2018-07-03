@@ -887,41 +887,6 @@ function FloatMap:GetRectIndex(x,y)
 	return self:GetIndex(xx,yy)
 end
 -------------------------------------------------------------------------------------------
-function FloatMap:Normalize()
-	--find highest and lowest values
-	local maxAlt = -1000.0
-	local minAlt = 1000.0
-	for i = 0,self.length - 1,1 do
-		local alt = self.data[i]
-		if alt > maxAlt then
-			maxAlt = alt
-		elseif alt < minAlt then
-			minAlt = alt
-		end
-	end
-	--subtract minAlt from all values so that
-	--all values are zero and above
-	for i = 0, self.length - 1, 1 do
-		self.data[i] = self.data[i] - minAlt
-	end
-
-	--subract minAlt also from maxAlt
-	maxAlt = maxAlt - minAlt
-
-	--determine and apply scaler to whole map
-	local scaler
-	if maxAlt == 0.0 then
-		scaler = 0.0
-	else
-		scaler = 1.0/maxAlt
-	end
-
-	for i = 0,self.length - 1,1 do
-		self.data[i] = self.data[i] * scaler
-	end
-
-end
--------------------------------------------------------------------------------------------
 function FloatMap:GenerateNoise()
 	for i = 0,self.length - 1,1 do
 		self.data[i] = PW_Rand()
@@ -1995,15 +1960,6 @@ function RiverMap:SetRiverSizes(rainfall_map)
 			self.riverThreshold = mc.minRiverSize
 		end
 	--print(string.format("river threshold = %f",self.riverThreshold))
-
---~ 	local river_map = FloatMap:New(g_ElevationMap.width,g_ElevationMap.height,g_ElevationMap.xWrap,g_ElevationMap.yWrap)
---~ 	for y = 0,g_ElevationMap.height - 1,1 do
---~ 		for x = 0,g_ElevationMap.width - 1,1 do
---~ 			local i = g_ElevationMap:GetIndex(x,y)
---~ 			river_map.data[i] = math.max(self.riverData[i].northJunction.size,self.riverData[i].southJunction.size)
---~ 		end
---~ 	end
---~ 	river_map:Normalize()
 end
 -------------------------------------------------------------------------------------------
 --This function returns the flow directions needed by civ
@@ -2087,7 +2043,7 @@ end
 function GenerateTwistedPerlinMap(width, height, xWrap, yWrap,minFreq,maxFreq,varFreq)
 	local inputNoise = FloatMap:New(width,height,xWrap,yWrap)
 	inputNoise:GenerateNoise()
-	inputNoise:Normalize()
+	NormalizeData(inputNoise.data)
 
 	local freqMap = FloatMap:New(width,height,xWrap,yWrap)
 	local i = 0
@@ -2099,7 +2055,7 @@ function GenerateTwistedPerlinMap(width, height, xWrap, yWrap,minFreq,maxFreq,va
 			i=i+1
 		end
 	end
-	freqMap:Normalize()
+	NormalizeData(freqMap.data)
 
 	local twistMap = FloatMap:New(width,height,xWrap,yWrap)
 	i = 0
@@ -2118,7 +2074,7 @@ function GenerateTwistedPerlinMap(width, height, xWrap, yWrap,minFreq,maxFreq,va
 		end
 	end
 
-	twistMap:Normalize()
+	NormalizeData(twistMap.data)
 	return twistMap
 end
 -------------------------------------------------------------------------------------------
@@ -2133,10 +2089,10 @@ end
 function GenerateMountainMap(width,height,xWrap,yWrap,initFreq)
 	local inputNoise = FloatMap:New(width,height,xWrap,yWrap)
 	inputNoise:GenerateBinaryNoise()
-	inputNoise:Normalize()
+	NormalizeData(inputNoise.data)
 	local inputNoise2 = FloatMap:New(width,height,xWrap,yWrap)
 	inputNoise2:GenerateNoise()
-	inputNoise2:Normalize()
+	NormalizeData(inputNoise2.data)
 
 	local mountainMap = FloatMap:New(width,height,xWrap,yWrap)
 	local stdDevMap = FloatMap:New(width,height,xWrap,yWrap)
@@ -2152,10 +2108,11 @@ function GenerateMountainMap(width,height,xWrap,yWrap,initFreq)
 			i=i+1
 		end
 	end
-	mountainMap:Normalize()
+
+	NormalizeData(mountainMap.data)
 	stdDevMap:Deviate(7)
-	stdDevMap:Normalize()
-	noiseMap:Normalize()
+	NormalizeData(stdDevMap.data)
+	NormalizeData(noiseMap.data)
 
 	local moundMap = FloatMap:New(width,height,xWrap,yWrap)
 	i = 0
@@ -2173,7 +2130,7 @@ function GenerateMountainMap(width,height,xWrap,yWrap,initFreq)
 			i=i+1
 		end
 	end
-	mountainMap:Normalize()
+	NormalizeData(mountainMap.data)
 	i = 0
 	for y = 0, mountainMap.height - 1,1 do
 		for x = 0,mountainMap.width - 1,1 do
@@ -2201,7 +2158,7 @@ function GenerateMountainMap(width,height,xWrap,yWrap,initFreq)
 		end
 	end
 
-	mountainMap:Normalize()
+	NormalizeData(mountainMap.data)
 	return mountainMap
 end
 -------------------------------------------------------------------------------------------
@@ -2260,7 +2217,7 @@ function GenerateElevationMap(width,height,xWrap,yWrap)
 		end
 	end
 
-	elevation_map:Normalize()
+	NormalizeData(elevation_map.data)
 
 	--attentuation should not break normalization
 	i = 0
@@ -2292,7 +2249,7 @@ function GenerateTempMaps(elevation_map)
 			i=i+1
 		end
 	end
-	aboveSeaLevelMap:Normalize()
+	NormalizeData(aboveSeaLevelMap.data)
 
 	PW_Log("Generating Summer Map")
 	local summerMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
@@ -2316,7 +2273,7 @@ function GenerateTempMaps(elevation_map)
 		end
 	end
 	summerMap:Smooth(math.floor(elevation_map.width/8))
-	summerMap:Normalize()
+	NormalizeData(summerMap.data)
 
 	PW_Log("Generating Winter Map")
 	local winterMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
@@ -2338,7 +2295,7 @@ function GenerateTempMaps(elevation_map)
 		end
 	end
 	winterMap:Smooth(math.floor(elevation_map.width/8))
-	winterMap:Normalize()
+	NormalizeData(winterMap.data)
 
 	local temperature_map = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	i = 0
@@ -2349,7 +2306,7 @@ function GenerateTempMaps(elevation_map)
 			i=i+1
 		end
 	end
-	temperature_map:Normalize()
+	NormalizeData(temperature_map.data)
 
 	return summerMap,winterMap,temperature_map
 end
@@ -2368,7 +2325,7 @@ function PW_GenerateRainfallMap(elevation_map)
 			i=i+1
 		end
 	end
-	geoMap:Normalize()
+	NormalizeData(geoMap.data)
 	i = 0
 	local sortedSummerMap = {}
 	local sortedWinterMap = {}
@@ -2489,9 +2446,9 @@ function PW_GenerateRainfallMap(elevation_map)
 		end
 	end
 
-	rainfallSummerMap:Normalize()
-	rainfallWinterMap:Normalize()
-	rainfallGeostrophicMap:Normalize()
+	NormalizeData(rainfallSummerMap.data)
+	NormalizeData(rainfallWinterMap.data)
+	NormalizeData(rainfallGeostrophicMap.data)
 
 	local rainfall_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap })
 	i = 0
@@ -2810,7 +2767,7 @@ function GenerateDiffMap(width,height,xWrap,yWrap)
 		end
 	end
 
-	diff_map:Normalize()
+	NormalizeData(diff_map.data)
 	i = 0
 	for y = 0, height - 1,1 do
 		for x = 0,width - 1,1 do
@@ -2823,7 +2780,7 @@ function GenerateDiffMap(width,height,xWrap,yWrap)
 		end
 	end
 
-	diff_map:Normalize()
+	NormalizeData(diff_map.data)
 	return diff_map
 end
 -------------------------------------------------------------------------------------------
