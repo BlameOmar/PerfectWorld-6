@@ -3681,7 +3681,12 @@ function PW_RectMap:New(width, height, options)
 
 	options = options or {}
 
-	obj.matrix_ = PW_Matrix:New(height, width, function() return options.default_value end)
+	local fill_func: ifunction = nil
+	if options.default_value ~= nil then
+		fill_func = function() return options.default_value end
+	end
+
+	obj.matrix_ = PW_Matrix:New(height, width, fill_func)
 	obj.width_ = width
 	obj.height_ = height
 	obj.default_value_ = options.default_value
