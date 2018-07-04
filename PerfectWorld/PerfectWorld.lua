@@ -1453,20 +1453,6 @@ function FloatMap:GetStdDevInHex(i,radius)
 	return deviation
 end
 -------------------------------------------------------------------------------------------
-function FloatMap:Smooth(radius)
-	local dataCopy = {}
-	
-	if radius > 8 then
-		radius = 8
-	end
-	
-	for i=0,self.length-1,1 do
-		dataCopy[i] = self:GetAverageInHex(i,radius)
-	end
-	
-	self.data = dataCopy
-end
--------------------------------------------------------------------------------------------
 function FloatMap:Deviate(radius)
 	local dataCopy = {}
 
@@ -2265,6 +2251,32 @@ function GenerateTempMaps(elevation_map)
 		return temp
 	end
 
+	local function smooth(rect_map: table, radius: number)
+		local temp_map = PW_RectMap:New(rect_map:Width(), rect_map:Height(), rect_map_options)
+
+		local map_reduce = PW_RectCoordinates.FastHexAreaMapReduce
+		local hex_value_at = rect_map.Get
+		local function hex_value(x, y) return hex_value_at(rect_map, x, y) end
+		local function add(a, b) return a + b end
+
+		local map_options = {
+			width = rect_map:Width(),
+			height = rect_map:Height(),
+			wrap_x = rect_map_options.wrap_x,
+			wrap_y = rect_map_options.wrap_y,
+		}
+
+		local function average(x: number, y: number)
+			local count, sum = map_reduce(x, y, radius, map_options, hex_value, add, 0)
+			return sum / count
+		end
+
+		temp_map:FillWith(average)
+		rect_map:Matrix().data = temp_map:Matrix().data
+	end
+
+	local smooth_radius = math.min(8, math.floor(elevation_map.width/8))
+
 	PW_Log("Generating Summer Map")
 	zenith = mc.tropicLatitudes
 	topTempLat = mc.topLatitude + zenith
@@ -2273,8 +2285,7 @@ function GenerateTempMaps(elevation_map)
 
 	local summerMap = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
 	summerMap:FillWith(season_temperature)
-	-- TODO(omar): Replace the smoothing function
-	--summerMap:Smooth(math.floor(elevation_map.width/8))
+	smooth(summerMap, smooth_radius)
 	NormalizeData(summerMap:Matrix().data)
 
 	PW_Log("Generating Winter Map")
@@ -2285,8 +2296,7 @@ function GenerateTempMaps(elevation_map)
 
 	local winterMap = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
 	winterMap:FillWith(season_temperature)
-	-- TODO(omar): Replace the smoothing function
-	--winterMap:Smooth(math.floor(elevation_map.width/8))
+	smooth(winterMap, smooth_radius)
 	NormalizeData(winterMap:Matrix().data)
 
 	local function temperature(x: number, y: number)
@@ -3582,7 +3592,7 @@ function PW_CubeCoordinates.Spiral(center: PW_Vector, radius: number, out_array:
 	-- localize for use in loop
 	local ring = PW_CubeCoordinates.Ring
 	for r = 0, radius do
-		ring(center, radius, out_array)
+		ring(center, r, out_array)
 	end
 
 	return out_array
@@ -3649,6 +3659,90 @@ end
 -- radius: the radius of the largest ring.
 function PW_RectCoordinates.Spiral(hex: PW_Vector, radius: number)
 	return Array.Map(PW_CubeCoordinates.Spiral(PW_ToCube(hex), radius), PW_ToRect)
+end
+
+-- Get the coordinates of hexes on a map that fall within a specified radius.
+-- Returns the number of hexes in the area.
+-- cx: the x coordinate of the center hex.
+-- cy: the y coordinate of the center hex.
+-- radius: the radius
+-- map_options:
+--   map_options.width: the width of the map.
+--   map_options.height: the height of the map.
+--   map_options.wrap_x: whether the map wraps around on the x axis.
+--   map_options.wrap_y: whether the map wraps around on the y axis.
+-- out_array: this array will be overwritten with coordinate data. It will be
+--   packed, with x and y coordinates at odd and even indices respectively.
+function PW_RectCoordinates.FastHexArea(cx: number, cy: number, radius: number, map_options: table, out_array: table)
+	-- Convert to cube coordinates.
+	-- The z value is implicit (x + y + z = 0), and isn't necessary.
+	local cx_cube = cx - (cy - (cy % 2)) / 2
+	local cy_cube = cy
+
+	local i = 0
+	for y = -radius, radius do
+		local x_min = math.max(-y - radius, -radius)
+		local x_max = math.min(-y + radius, radius)
+		for x = x_min, x_max do
+			local x_cube = x + cx_cube
+			local y_cube = y + cy_cube
+
+			-- Convert back to rect coordinates.
+			local x = x_cube + (y_cube - (y_cube % 2)) / 2
+			local y = y_cube
+
+			if (map_options.wrap_x or (0 <= x and x < map_options.width)) and (map_options.wrap_y or (0 <= y and y < map_options.height)) then
+				local offset = 2 * i
+				out_array[offset + 1] = x
+				out_array[offset + 2] = y
+				i = i + 1
+			end
+		end
+	end
+
+	return i
+end
+
+-- Runs a map reduce over hexes on a map that fall within a specified radius.
+-- Returns the number of hexes in the area and the map-reduced value.
+-- cx: the x coordinate of the center hex.
+-- cy: the y coordinate of the center hex.
+-- radius: the radius
+-- map_options:
+--   map_options.width: the width of the map.
+--   map_options.height: the height of the map.
+--   map_options.wrap_x: whether the map wraps around on the x axis.
+--   map_options.wrap_y: whether the map wraps around on the y axis.
+-- map_function: a function that maps the coordinates to a value.
+-- reduce_function: a function that reduces the mapped values to a single value.
+-- initial_value: the initial value for the reduce function.
+function PW_RectCoordinates.FastHexAreaMapReduce(cx: number, cy: number, radius: number, map_options: table, map_func: ifunction, reduce_func: ifunction, initial_value)
+	-- Convert to cube coordinates.
+	-- The z value is implicit (x + y + z = 0), and isn't necessary.
+	local cx_cube = cx - (cy - (cy % 2)) / 2
+	local cy_cube = cy
+
+	local i = 0
+	local reduced = initial_value
+	for y = -radius, radius do
+		local x_min = math.max(-y - radius, -radius)
+		local x_max = math.min(-y + radius, radius)
+		for x = x_min, x_max do
+			local x_cube = x + cx_cube
+			local y_cube = y + cy_cube
+
+			-- Convert back to rect coordinates.
+			local x = x_cube + (y_cube - (y_cube % 2)) / 2
+			local y = y_cube
+
+			if (map_options.wrap_x or (0 <= x and x < map_options.width)) and (map_options.wrap_y or (0 <= y and y < map_options.height)) then
+				reduced = reduce_func(reduced, map_func(x, y))
+				i = i + 1
+			end
+		end
+	end
+
+	return i, reduced
 end
 
 --------------------------------------------------------------------------------
