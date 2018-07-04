@@ -168,6 +168,8 @@ function MapConstants:New()
 	
 	--Hex maps are shorter in the y direction than they are wide per unit by this much. We need to know this to sample the perlin maps properly so they don't look squished.
 	local W,H = Map.GetGridSize()
+	mconst.width = W
+	mconst.height = H
 	mconst.YtoXRatio = math.sqrt(W/H)
 	-------------------------------------------------------------------------------------------
 	--Terrain type constants
@@ -571,8 +573,102 @@ end
 
 --------------------------------------------------------------------------------
 function LatitudeAtY(y)
-	local _, height = Map.GetGridSize()
-	return (y / (height - 1)) * (mc.topLatitude - mc.bottomLatitude) + mc.bottomLatitude
+	return (y / (mc.height - 1)) * (mc.topLatitude - mc.bottomLatitude) + mc.bottomLatitude
+end
+--------------------------------------------------------------------------------
+function GetZone(y)
+	local lat = LatitudeAtY(y)
+	if y < 0 or y >= mc.height then
+		return mc.NOZONE
+	end
+	if lat > mc.polarFrontLatitude then
+		return mc.NPOLAR
+	elseif lat >= mc.horseLatitudes then
+		return mc.NTEMPERATE
+	elseif lat >= 0.0 then
+		return mc.NEQUATOR
+	elseif lat > -mc.horseLatitudes then
+		return mc.SEQUATOR
+	elseif lat >= -mc.polarFrontLatitude then
+		return mc.STEMPERATE
+	else
+		return mc.SPOLAR
+	end
+end
+--------------------------------------------------------------------------------
+function GetYFromZone(zone, bTop)
+	if bTop then
+		for y=mc.height - 1,0,-1 do
+			if zone == GetZone(y) then
+				return y
+			end
+		end
+	else
+		for y=0,mc.height - 1,1 do
+			if zone == GetZone(y) then
+				return y
+			end
+		end
+	end
+	return -1
+end
+--------------------------------------------------------------------------------
+function GetGeostrophicWindDirections(zone)
+
+	if zone == mc.NPOLAR then
+		return mc.SW,mc.W
+	elseif zone == mc.NTEMPERATE then
+		return mc.NE,mc.E
+	elseif zone == mc.NEQUATOR then
+		return mc.SW,mc.W
+	elseif zone == mc.SEQUATOR then
+		return mc.NW,mc.W
+	elseif zone == mc.STEMPERATE then
+		return mc.SE, mc.E
+	else
+		return mc.NW,mc.W
+	end
+	return -1,-1
+end
+--------------------------------------------------------------------------------
+function GetGeostrophicPressure(lat)
+	local latRange = nil
+	local latPercent = nil
+	local pressure = nil
+	if lat > mc.polarFrontLatitude then
+		latRange = 90.0 - mc.polarFrontLatitude
+		latPercent = (lat - mc.polarFrontLatitude)/latRange
+		pressure = 1.0 - latPercent
+	elseif lat >= mc.horseLatitudes then
+		latRange = mc.polarFrontLatitude - mc.horseLatitudes
+		latPercent = (lat - mc.horseLatitudes)/latRange
+		pressure = latPercent
+	elseif lat >= 0.0 then
+		latRange = mc.horseLatitudes - 0.0
+		latPercent = (lat - 0.0)/latRange
+		pressure = 1.0 - latPercent
+	elseif lat > -mc.horseLatitudes then
+		latRange = 0.0 + mc.horseLatitudes
+		latPercent = (lat + mc.horseLatitudes)/latRange
+		pressure = latPercent
+	elseif lat >= -mc.polarFrontLatitude then
+		latRange = -mc.horseLatitudes + mc.polarFrontLatitude
+		latPercent = (lat + mc.polarFrontLatitude)/latRange
+		pressure = 1.0 - latPercent
+	else
+		latRange = -mc.polarFrontLatitude + 90.0
+		latPercent = (lat + 90)/latRange
+		pressure = latPercent
+	end
+	pressure = pressure + 1
+	if pressure > 1.5 then
+		pressure = pressure * mc.pressureNorm
+	else
+		pressure = pressure / mc.pressureNorm
+	end
+	pressure = pressure - 1
+	--print(pressure)
+	return pressure
 end
 --------------------------------------------------------------------------------
 --Interpolation and Perlin functions
@@ -934,101 +1030,6 @@ function FloatMap:FindThresholdFromPercent(percent, greaterThan, excludeZeros)
 	local threshIndex = math.floor((#mapList * percentage)/100) 
 
 	return mapList[threshIndex-1]+const
-end
--------------------------------------------------------------------------------------------
-function FloatMap:GetZone(y)
-	local lat = LatitudeAtY(y)
-	if y < 0 or y >= self.height then
-		return mc.NOZONE
-	end
-	if lat > mc.polarFrontLatitude then
-		return mc.NPOLAR
-	elseif lat >= mc.horseLatitudes then
-		return mc.NTEMPERATE
-	elseif lat >= 0.0 then
-		return mc.NEQUATOR
-	elseif lat > -mc.horseLatitudes then
-		return mc.SEQUATOR
-	elseif lat >= -mc.polarFrontLatitude then
-		return mc.STEMPERATE
-	else
-		return mc.SPOLAR
-	end
-end
--------------------------------------------------------------------------------------------
-function FloatMap:GetYFromZone(zone, bTop)
-	if bTop then
-		for y=self.height - 1,0,-1 do
-			if zone == self:GetZone(y) then
-				return y
-			end
-		end
-	else
-		for y=0,self.height - 1,1 do
-			if zone == self:GetZone(y) then
-				return y
-			end
-		end
-	end
-	return -1
-end
--------------------------------------------------------------------------------------------
-function FloatMap:GetGeostrophicWindDirections(zone)
-
-	if zone == mc.NPOLAR then
-		return mc.SW,mc.W
-	elseif zone == mc.NTEMPERATE then
-		return mc.NE,mc.E
-	elseif zone == mc.NEQUATOR then
-		return mc.SW,mc.W
-	elseif zone == mc.SEQUATOR then
-		return mc.NW,mc.W
-	elseif zone == mc.STEMPERATE then
-		return mc.SE, mc.E
-	else
-		return mc.NW,mc.W
-	end
-	return -1,-1
-end
--------------------------------------------------------------------------------------------
-function FloatMap:GetGeostrophicPressure(lat)
-	local latRange = nil
-	local latPercent = nil
-	local pressure = nil
-	if lat > mc.polarFrontLatitude then
-		latRange = 90.0 - mc.polarFrontLatitude
-		latPercent = (lat - mc.polarFrontLatitude)/latRange
-		pressure = 1.0 - latPercent
-	elseif lat >= mc.horseLatitudes then
-		latRange = mc.polarFrontLatitude - mc.horseLatitudes
-		latPercent = (lat - mc.horseLatitudes)/latRange
-		pressure = latPercent
-	elseif lat >= 0.0 then
-		latRange = mc.horseLatitudes - 0.0
-		latPercent = (lat - 0.0)/latRange
-		pressure = 1.0 - latPercent
-	elseif lat > -mc.horseLatitudes then
-		latRange = 0.0 + mc.horseLatitudes
-		latPercent = (lat + mc.horseLatitudes)/latRange
-		pressure = latPercent
-	elseif lat >= -mc.polarFrontLatitude then
-		latRange = -mc.horseLatitudes + mc.polarFrontLatitude
-		latPercent = (lat + mc.polarFrontLatitude)/latRange
-		pressure = 1.0 - latPercent
-	else
-		latRange = -mc.polarFrontLatitude + 90.0
-		latPercent = (lat + 90)/latRange
-		pressure = latPercent
-	end
-	pressure = pressure + 1
-	if pressure > 1.5 then
-		pressure = pressure * mc.pressureNorm
-	else
-		pressure = pressure / mc.pressureNorm
-	end
-	pressure = pressure - 1
-	--print(pressure)
-	return pressure
 end
 -------------------------------------------------------------------------------------------
 function GetCircle(i,radius)
@@ -2319,7 +2320,7 @@ function PW_GenerateRainfallMap(elevation_map)
 	for y = 0,elevation_map.height - 1,1 do
 		for x = 0,elevation_map.width - 1,1 do
 			local lat = LatitudeAtY(y)
-			local pressure = elevation_map:GetGeostrophicPressure(lat)
+			local pressure = GetGeostrophicPressure(lat)
 			geoMap.data[i] = pressure
 			--print(string.format("pressure for (%d,%d) is %.8f",x,y,pressure))
 			i=i+1
@@ -2351,8 +2352,8 @@ function PW_GenerateRainfallMap(elevation_map)
 	local incX = 0
 	local incY = 0
 	for zone=0,5,1 do
-		local topY = elevation_map:GetYFromZone(zone,true)
-		local bottomY = elevation_map:GetYFromZone(zone,false)
+		local topY = GetYFromZone(zone,true)
+		local bottomY = GetYFromZone(zone,false)
 		if not (topY == -1 and bottomY == -1) then
 			if topY == -1 then
 				topY = elevation_map.height - 1
@@ -2360,7 +2361,7 @@ function PW_GenerateRainfallMap(elevation_map)
 			if bottomY == -1 then
 				bottomY = 0
 			end
-			local dir1,dir2 = elevation_map:GetGeostrophicWindDirections(zone)
+			local dir1,dir2 = GetGeostrophicWindDirections(zone)
 			if (dir1 == mc.SW) or (dir1 == mc.SE) then
 				yStart = topY
 				yStop = bottomY --- 1
@@ -2431,12 +2432,12 @@ function DistributeRain(elevation_map: table, temperature_map: table, pressureMa
 		--make list of neighbors
 		local nList = {}
 		if geostrophic then
-			local zone = elevation_map:GetZone(y)
-			local dir1,dir2 = elevation_map:GetGeostrophicWindDirections(zone)
+			local zone = GetZone(y)
+			local dir1,dir2 = GetGeostrophicWindDirections(zone)
 			local x1,y1 = elevation_map:GetNeighbor(x,y,dir1)
 			local ii = elevation_map:GetIndex(x1,y1)
 			--neighbor must be on map and in same wind zone
-			if ii >= 0 and (elevation_map:GetZone(y1) == elevation_map:GetZone(y)) then
+			if ii >= 0 and (GetZone(y1) == GetZone(y)) then
 				table.insert(nList,{x1,y1})
 			end
 			local x2,y2 = elevation_map:GetNeighbor(x,y,dir2)
@@ -2468,7 +2469,7 @@ function DistributeRain(elevation_map: table, temperature_map: table, pressureMa
 				local upLiftDest = math.max(math.pow(pressureMap.data[ii],mc.upLiftExponent),1.0 - temperature_map.data[ii])
 				local cost = GetRainCost(upLiftSource,upLiftDest)
 				local bonus = 0.0
-				if (elevation_map:GetZone(y) == mc.NPOLAR or elevation_map:GetZone(y) == mc.SPOLAR) then
+				if (GetZone(y) == mc.NPOLAR or GetZone(y) == mc.SPOLAR) then
 					bonus = mc.polarRainBoost
 				end
 				if geostrophic and #nList == 2 then
