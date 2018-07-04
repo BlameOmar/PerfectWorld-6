@@ -2251,61 +2251,50 @@ function GenerateTempMaps(elevation_map)
 	elevation_above_sea_level_map:FillWith(elevation_above_sea_level)
 	NormalizeData(elevation_above_sea_level_map:Matrix().data)
 
-	PW_Log("Generating Summer Map")
-	local summerMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
-	local zenith = mc.tropicLatitudes
-	local topTempLat = mc.topLatitude + zenith
-	local bottomTempLat = mc.bottomLatitude
-	local latRange = topTempLat - bottomTempLat
-	local i = 0
-	for y = 0,elevation_map.height - 1,1 do
-		for x = 0,elevation_map.width - 1,1 do
-			local lat = LatitudeAtY(y)
-			--print("y=" .. y ..",lat=" .. lat)
-			local latPercent = (lat - bottomTempLat)/latRange
-			--print("latPercent=" .. latPercent)
-			local temp = (math.sin(latPercent * math.pi * 2 - math.pi * 0.5) * 0.5 + 0.5)
-			if elevation_map:IsBelowSeaLevel(x,y) then
-				temp = temp * mc.maxWaterTemp + mc.minWaterTemp
-			end
-			summerMap.data[i] = temp
-			i=i+1
+	local zenith
+	local topTempLat
+	local bottomTempLat
+	local latRange
+	local function season_temperature(x: number, y: number)
+		local latPercent = (LatitudeAtY(y) - bottomTempLat) / latRange
+		local temp = 0.5 * math.sin(math.pi * (2 * latPercent - 0.5)) +  0.5
+		if elevation_map:IsBelowSeaLevel(x, y) then
+			temp = temp * mc.maxWaterTemp + mc.minWaterTemp
 		end
+
+		return temp
 	end
-	summerMap:Smooth(math.floor(elevation_map.width/8))
-	NormalizeData(summerMap.data)
+
+	PW_Log("Generating Summer Map")
+	zenith = mc.tropicLatitudes
+	topTempLat = mc.topLatitude + zenith
+	bottomTempLat = mc.bottomLatitude
+	latRange = topTempLat - bottomTempLat
+
+	local summerMap = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
+	summerMap:FillWith(season_temperature)
+	-- TODO(omar): Replace the smoothing function
+	--summerMap:Smooth(math.floor(elevation_map.width/8))
+	NormalizeData(summerMap:Matrix().data)
 
 	PW_Log("Generating Winter Map")
-	local winterMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
 	zenith = -mc.tropicLatitudes
 	topTempLat = mc.topLatitude
 	bottomTempLat = mc.bottomLatitude + zenith
 	latRange = topTempLat - bottomTempLat
-	i = 0
-	for y = 0,elevation_map.height - 1,1 do
-		for x = 0,elevation_map.width - 1,1 do
-			local lat = LatitudeAtY(y)
-			local latPercent = (lat - bottomTempLat)/latRange
-			local temp = math.sin(latPercent * math.pi * 2 - math.pi * 0.5) * 0.5 + 0.5
-			if elevation_map:IsBelowSeaLevel(x,y) then
-				temp = temp * mc.maxWaterTemp + mc.minWaterTemp
-			end
-			winterMap.data[i] = temp
-			i=i+1
-		end
+
+	local winterMap = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
+	winterMap:FillWith(season_temperature)
+	-- TODO(omar): Replace the smoothing function
+	--winterMap:Smooth(math.floor(elevation_map.width/8))
+	NormalizeData(winterMap:Matrix().data)
+
+	local function temperature(x: number, y: number)
+		return (winterMap:Get(x, y) + summerMap:Get(x, y)) * (1.0 - 0.5 * elevation_above_sea_level_map:Get(x, y))
 	end
-	winterMap:Smooth(math.floor(elevation_map.width/8))
-	NormalizeData(winterMap.data)
 
 	local temperature_map = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
-	i = 0
-	for y = 0, elevation_map.height - 1 do
-		for x = 0, elevation_map.width - 1 do
-			temperature_map:Reset(x, y, (winterMap.data[i] + summerMap.data[i]) * (1.0 - 0.5 * elevation_above_sea_level_map:Get(x, y)))
-			--temperature_map:Reset(x, y, (winterMap.data[i] + summerMap.data[i]) * (1.0 - elevation_above_sea_level_map:Get(x, y)))
-			i=i+1
-		end
-	end
+	temperature_map:FillWith(temperature)
 	NormalizeData(temperature_map:Matrix().data)
 
 	return summerMap, winterMap, temperature_map
@@ -2313,19 +2302,17 @@ end
 -------------------------------------------------------------------------------------------
 function PW_GenerateRainfallMap(elevation_map)
 	PW_Log("Generating Rainfall Map")
+
+	local rect_map_options = { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap}
+
 	local summerMap, winterMap, temperature_map = GenerateTempMaps(elevation_map)
-	local geoMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
-	local i = 0
-	for y = 0,elevation_map.height - 1,1 do
-		for x = 0,elevation_map.width - 1,1 do
-			local lat = LatitudeAtY(y)
-			local pressure = GetGeostrophicPressure(lat)
-			geoMap.data[i] = pressure
-			--print(string.format("pressure for (%d,%d) is %.8f",x,y,pressure))
-			i=i+1
-		end
+
+	local function pressure(x: number, y: number)
+		return GetGeostrophicPressure(LatitudeAtY(y))
 	end
-	NormalizeData(geoMap.data)
+	local geoMap = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
+	geoMap:FillWith(pressure)
+	NormalizeData(geoMap:Matrix().data)
 
 	-- Using the otherwise unused z component of PW_Vector to define the ordering.
 	local summer_map_order = {}
@@ -2333,8 +2320,8 @@ function PW_GenerateRainfallMap(elevation_map)
 	for y = 0, elevation_map.height - 1 do
 		for x = 0, elevation_map.width - 1 do
 			local i = #summer_map_order
-			summer_map_order[i + 1] = PW_Vector3(x, y, summerMap.data[i])
-			winter_map_order[i + 1] = PW_Vector3(x, y, winterMap.data[i])
+			summer_map_order[i + 1] = PW_Vector3(x, y, summerMap:Get(x, y))
+			winter_map_order[i + 1] = PW_Vector3(x, y, winterMap:Get(x, y))
 		end
 	end
 	do
@@ -2407,7 +2394,7 @@ function PW_GenerateRainfallMap(elevation_map)
 		return rainfall_summer_map:Get(x, y) + rainfall_winter_map:Get(x, y) + mc.geostrophicFactor * rainfall_geostrophic_map:Get(x, y)
 	end
 
-	local rainfall_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap })
+	local rainfall_map = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
 	rainfall_map:FillWith(rainfall)
 	NormalizeData(rainfall_map:Matrix().data)
 
@@ -2423,8 +2410,7 @@ function DistributeRain(elevation_map: table, temperature_map: table, pressureMa
 		local y: number = hexes[h].y
 		local temperature: number = temperature_map:Get(x, y)
 
-		local i = elevation_map:GetIndex(x,y)
-		local upLiftSource = math.max(math.pow(pressureMap.data[i],mc.upLiftExponent),1.0 - temperature)
+		local upLiftSource = math.max(math.pow(pressureMap:Get(x, y), mc.upLiftExponent), 1.0 - temperature)
 		if elevation_map:IsBelowSeaLevel(x,y) then
 			moisture_map:Reset(x, y, math.max(moisture_map:Get(x, y), temperature))
 		end
@@ -2435,21 +2421,18 @@ function DistributeRain(elevation_map: table, temperature_map: table, pressureMa
 			local zone = GetZone(y)
 			local dir1,dir2 = GetGeostrophicWindDirections(zone)
 			local x1,y1 = elevation_map:GetNeighbor(x,y,dir1)
-			local ii = elevation_map:GetIndex(x1,y1)
 			--neighbor must be on map and in same wind zone
-			if ii >= 0 and (GetZone(y1) == GetZone(y)) then
+			if elevation_map:GetIndex(x1,y1) >= 0 and (GetZone(y1) == GetZone(y)) then
 				table.insert(nList,{x1,y1})
 			end
 			local x2,y2 = elevation_map:GetNeighbor(x,y,dir2)
-			ii = elevation_map:GetIndex(x2,y2)
-			if ii >= 0 then
+			if elevation_map:GetIndex(x2,y2) >= 0 then
 				table.insert(nList,{x2,y2})
 			end
 		else
 			for dir = 1,6,1 do
 				local xx,yy = elevation_map:GetNeighbor(x,y,dir)
-				local ii = elevation_map:GetIndex(xx,yy)
-				if ii >= 0 and pressureMap.data[i] <= pressureMap.data[ii] then
+				if elevation_map:GetIndex(xx,yy) >= 0 and pressureMap:Get(x, y) <= pressureMap:Get(xx, yy) then
 					table.insert(nList,{xx,yy})
 				end
 			end
@@ -2465,8 +2448,7 @@ function DistributeRain(elevation_map: table, temperature_map: table, pressureMa
 			for n = 1,#nList,1 do
 				local xx = nList[n][1]
 				local yy = nList[n][2]
-				local ii = elevation_map:GetIndex(xx,yy)
-				local upLiftDest = math.max(math.pow(pressureMap.data[ii],mc.upLiftExponent),1.0 - temperature_map:Get(xx, yy))
+				local upLiftDest = math.max(math.pow(pressureMap:Get(xx, yy),mc.upLiftExponent),1.0 - temperature_map:Get(xx, yy))
 				local cost = GetRainCost(upLiftSource,upLiftDest)
 				local bonus = 0.0
 				if (GetZone(y) == mc.NPOLAR or GetZone(y) == mc.SPOLAR) then
