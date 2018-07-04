@@ -525,7 +525,7 @@ function PW_GenerateTerrainTypes(elevation_map, plot_types_map, rainfall_map, te
 		for x = 0, plot_types_map:Width() - 1 do
 			local plot_type = plot_types_map:Get(x, y)
 			local rainfall = rainfall_map:Get(x, y)
-			local temperature = temperature_map.data[i]
+			local temperature = temperature_map:Get(x, y)
 			if plot_type ~= g_PLOT_TYPE_OCEAN then -- Land
 				if temperature < mc.snowTemperature then
 					terrain_types_map:Reset(x, y, g_TERRAIN_TYPE_SNOW)
@@ -2298,18 +2298,18 @@ function GenerateTempMaps(elevation_map)
 	winterMap:Smooth(math.floor(elevation_map.width/8))
 	NormalizeData(winterMap.data)
 
-	local temperature_map = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
+	local temperature_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
 	i = 0
-	for y = 0,elevation_map.height - 1,1 do
-		for x = 0,elevation_map.width - 1,1 do
-			temperature_map.data[i] = (winterMap.data[i] + summerMap.data[i]) * (1.0 - 0.5 * aboveSeaLevelMap.data[i])
-			--temperature_map.data[i] = (winterMap.data[i] + summerMap.data[i]) * (1.0 - aboveSeaLevelMap.data[i])
+	for y = 0, elevation_map.height - 1 do
+		for x = 0, elevation_map.width - 1 do
+			temperature_map:Reset(x, y, (winterMap.data[i] + summerMap.data[i]) * (1.0 - 0.5 * aboveSeaLevelMap.data[i]))
+			--temperature_map:Reset(x, y, (winterMap.data[i] + summerMap.data[i]) * (1.0 - aboveSeaLevelMap.data[i]))
 			i=i+1
 		end
 	end
-	NormalizeData(temperature_map.data)
+	NormalizeData(temperature_map:Matrix().data)
 
-	return summerMap,winterMap,temperature_map
+	return summerMap, winterMap, temperature_map
 end
 -------------------------------------------------------------------------------------------
 function PW_GenerateRainfallMap(elevation_map)
@@ -2420,13 +2420,14 @@ function DistributeRain(elevation_map: table, temperature_map: table, pressureMa
 	local moisture_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
 
 	for h = 1, #hexes do
-		local x = hexes[h].x
-		local y = hexes[h].y
+		local x: number = hexes[h].x
+		local y: number = hexes[h].y
+		local temperature: number = temperature_map:Get(x, y)
 
 		local i = elevation_map:GetIndex(x,y)
-		local upLiftSource = math.max(math.pow(pressureMap.data[i],mc.upLiftExponent),1.0 - temperature_map.data[i])
+		local upLiftSource = math.max(math.pow(pressureMap.data[i],mc.upLiftExponent),1.0 - temperature)
 		if elevation_map:IsBelowSeaLevel(x,y) then
-			moisture_map:Reset(x, y, math.max(moisture_map:Get(x, y), temperature_map.data[i]))
+			moisture_map:Reset(x, y, math.max(moisture_map:Get(x, y), temperature))
 		end
 
 		--make list of neighbors
@@ -2466,7 +2467,7 @@ function DistributeRain(elevation_map: table, temperature_map: table, pressureMa
 				local xx = nList[n][1]
 				local yy = nList[n][2]
 				local ii = elevation_map:GetIndex(xx,yy)
-				local upLiftDest = math.max(math.pow(pressureMap.data[ii],mc.upLiftExponent),1.0 - temperature_map.data[ii])
+				local upLiftDest = math.max(math.pow(pressureMap.data[ii],mc.upLiftExponent),1.0 - temperature_map:Get(xx, yy))
 				local cost = GetRainCost(upLiftSource,upLiftDest)
 				local bonus = 0.0
 				if (GetZone(y) == mc.NPOLAR or GetZone(y) == mc.SPOLAR) then
@@ -3001,7 +3002,8 @@ function Cleanup(diff_map, temperature_map)
 		local i = g_LandTab[k]
 		local plot = Map.GetPlotByIndex(i)
 		if not plot:IsMountain() then
-			if temperature_map.data[i] > mc.treesMinTemperature then
+			-- FIXME(omar): Don't index the Matrix data directly.
+			if temperature_map:Matrix().data[1 + i] > mc.treesMinTemperature then
 				if plot:IsCoastalLand() then
 					if plot:IsRiver() then
 						if plot:GetTerrainType() ~= terrainDesert then
@@ -3066,7 +3068,7 @@ function AddFeatures(rainfall_map, temperature_map, plot_types_map, terrain_type
 				local plot_type = plot_types_map:Get(x, y)
 				local flat_terrain_type = terrain_types_map:Get(x, y)
 				local rainfall = rainfall_map:Get(x, y)
-				local temperature = temperature_map.data[i]
+				local temperature = temperature_map:Get(x, y)
 
 				if plot:GetTerrainType() == g_TERRAIN_TYPE_DESERT then
 					if plot:IsRiver() then
