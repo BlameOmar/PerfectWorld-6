@@ -2237,20 +2237,19 @@ end
 -------------------------------------------------------------------------------------------
 function GenerateTempMaps(elevation_map)
 	PW_Log("Generating Temperature Maps")
+	local rect_map_options = { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap}
 
-	local aboveSeaLevelMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
-	local i = 0
-	for y = 0,elevation_map.height - 1,1 do
-		for x = 0,elevation_map.width - 1,1 do
-			if elevation_map:IsBelowSeaLevel(x,y) then
-				aboveSeaLevelMap.data[i] = 0.0
-			else
-				aboveSeaLevelMap.data[i] = elevation_map.data[i] - elevation_map.seaLevelThreshold
-			end
-			i=i+1
+	local function elevation_above_sea_level(x: number, y: number)
+		if elevation_map:IsBelowSeaLevel(x, y) then
+			return 0.0
+		else
+			return elevation_map.data[elevation_map:GetIndex(x, y)] - elevation_map.seaLevelThreshold
 		end
 	end
-	NormalizeData(aboveSeaLevelMap.data)
+
+	local elevation_above_sea_level_map = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
+	elevation_above_sea_level_map:FillWith(elevation_above_sea_level)
+	NormalizeData(elevation_above_sea_level_map:Matrix().data)
 
 	PW_Log("Generating Summer Map")
 	local summerMap = FloatMap:New(elevation_map.width,elevation_map.height,elevation_map.xWrap,elevation_map.yWrap)
@@ -2258,7 +2257,7 @@ function GenerateTempMaps(elevation_map)
 	local topTempLat = mc.topLatitude + zenith
 	local bottomTempLat = mc.bottomLatitude
 	local latRange = topTempLat - bottomTempLat
-	i = 0
+	local i = 0
 	for y = 0,elevation_map.height - 1,1 do
 		for x = 0,elevation_map.width - 1,1 do
 			local lat = LatitudeAtY(y)
@@ -2298,12 +2297,12 @@ function GenerateTempMaps(elevation_map)
 	winterMap:Smooth(math.floor(elevation_map.width/8))
 	NormalizeData(winterMap.data)
 
-	local temperature_map = PW_RectMap:New(elevation_map.width, elevation_map.height, { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap, default_value = 0.0 })
+	local temperature_map = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
 	i = 0
 	for y = 0, elevation_map.height - 1 do
 		for x = 0, elevation_map.width - 1 do
-			temperature_map:Reset(x, y, (winterMap.data[i] + summerMap.data[i]) * (1.0 - 0.5 * aboveSeaLevelMap.data[i]))
-			--temperature_map:Reset(x, y, (winterMap.data[i] + summerMap.data[i]) * (1.0 - aboveSeaLevelMap.data[i]))
+			temperature_map:Reset(x, y, (winterMap.data[i] + summerMap.data[i]) * (1.0 - 0.5 * elevation_above_sea_level_map:Get(x, y)))
+			--temperature_map:Reset(x, y, (winterMap.data[i] + summerMap.data[i]) * (1.0 - elevation_above_sea_level_map:Get(x, y)))
 			i=i+1
 		end
 	end
