@@ -632,33 +632,33 @@ function GetGeostrophicWindDirections(zone)
 end
 --------------------------------------------------------------------------------
 function GetGeostrophicPressure(lat)
-	local latRange = nil
-	local latPercent = nil
+	local latitude_range = nil
+	local latitude_percent = nil
 	local pressure = nil
 	if lat > mc.polarFrontLatitude then
-		latRange = 90.0 - mc.polarFrontLatitude
-		latPercent = (lat - mc.polarFrontLatitude)/latRange
-		pressure = 1.0 - latPercent
+		latitude_range = 90.0 - mc.polarFrontLatitude
+		latitude_percent = (lat - mc.polarFrontLatitude)/latitude_range
+		pressure = 1.0 - latitude_percent
 	elseif lat >= mc.horseLatitudes then
-		latRange = mc.polarFrontLatitude - mc.horseLatitudes
-		latPercent = (lat - mc.horseLatitudes)/latRange
-		pressure = latPercent
+		latitude_range = mc.polarFrontLatitude - mc.horseLatitudes
+		latitude_percent = (lat - mc.horseLatitudes)/latitude_range
+		pressure = latitude_percent
 	elseif lat >= 0.0 then
-		latRange = mc.horseLatitudes - 0.0
-		latPercent = (lat - 0.0)/latRange
-		pressure = 1.0 - latPercent
+		latitude_range = mc.horseLatitudes - 0.0
+		latitude_percent = (lat - 0.0)/latitude_range
+		pressure = 1.0 - latitude_percent
 	elseif lat > -mc.horseLatitudes then
-		latRange = 0.0 + mc.horseLatitudes
-		latPercent = (lat + mc.horseLatitudes)/latRange
-		pressure = latPercent
+		latitude_range = 0.0 + mc.horseLatitudes
+		latitude_percent = (lat + mc.horseLatitudes)/latitude_range
+		pressure = latitude_percent
 	elseif lat >= -mc.polarFrontLatitude then
-		latRange = -mc.horseLatitudes + mc.polarFrontLatitude
-		latPercent = (lat + mc.polarFrontLatitude)/latRange
-		pressure = 1.0 - latPercent
+		latitude_range = -mc.horseLatitudes + mc.polarFrontLatitude
+		latitude_percent = (lat + mc.polarFrontLatitude)/latitude_range
+		pressure = 1.0 - latitude_percent
 	else
-		latRange = -mc.polarFrontLatitude + 90.0
-		latPercent = (lat + 90)/latRange
-		pressure = latPercent
+		latitude_range = -mc.polarFrontLatitude + 90.0
+		latitude_percent = (lat + 90)/latitude_range
+		pressure = latitude_percent
 	end
 	pressure = pressure + 1
 	if pressure > 1.5 then
@@ -2238,12 +2238,12 @@ function GenerateTempMaps(elevation_map)
 	NormalizeData(elevation_above_sea_level_map:Matrix().data)
 
 	local zenith
-	local topTempLat
-	local bottomTempLat
-	local latRange
+	local top_temp_latitude
+	local bottom_temp_latitude
+	local latitude_range
 	local function season_temperature(x: number, y: number)
-		local latPercent = (LatitudeAtY(y) - bottomTempLat) / latRange
-		local temp = 0.5 * math.sin(math.pi * (2 * latPercent - 0.5)) +  0.5
+		local latitude_percent = (LatitudeAtY(y) - bottom_temp_latitude) / latitude_range
+		local temp = 0.5 * math.sin(math.pi * (2 * latitude_percent - 0.5)) +  0.5
 		if elevation_map:IsBelowSeaLevel(x, y) then
 			temp = temp * mc.maxWaterTemp + mc.minWaterTemp
 		end
@@ -2279,35 +2279,35 @@ function GenerateTempMaps(elevation_map)
 
 	PW_Log("Generating Summer Map")
 	zenith = mc.tropicLatitudes
-	topTempLat = mc.topLatitude + zenith
-	bottomTempLat = mc.bottomLatitude
-	latRange = topTempLat - bottomTempLat
+	top_temp_latitude = mc.topLatitude + zenith
+	bottom_temp_latitude = mc.bottomLatitude
+	latitude_range = top_temp_latitude - bottom_temp_latitude
 
-	local summerMap = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
-	summerMap:FillWith(season_temperature)
-	smooth(summerMap, smooth_radius)
-	NormalizeData(summerMap:Matrix().data)
+	local summer_map = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
+	summer_map:FillWith(season_temperature)
+	smooth(summer_map, smooth_radius)
+	NormalizeData(summer_map:Matrix().data)
 
 	PW_Log("Generating Winter Map")
 	zenith = -mc.tropicLatitudes
-	topTempLat = mc.topLatitude
-	bottomTempLat = mc.bottomLatitude + zenith
-	latRange = topTempLat - bottomTempLat
+	top_temp_latitude = mc.topLatitude
+	bottom_temp_latitude = mc.bottomLatitude + zenith
+	latitude_range = top_temp_latitude - bottom_temp_latitude
 
-	local winterMap = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
-	winterMap:FillWith(season_temperature)
-	smooth(winterMap, smooth_radius)
-	NormalizeData(winterMap:Matrix().data)
+	local winter_map = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
+	winter_map:FillWith(season_temperature)
+	smooth(winter_map, smooth_radius)
+	NormalizeData(winter_map:Matrix().data)
 
 	local function temperature(x: number, y: number)
-		return (winterMap:Get(x, y) + summerMap:Get(x, y)) * (1.0 - 0.5 * elevation_above_sea_level_map:Get(x, y))
+		return (winter_map:Get(x, y) + summer_map:Get(x, y)) * (1.0 - 0.5 * elevation_above_sea_level_map:Get(x, y))
 	end
 
 	local temperature_map = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
 	temperature_map:FillWith(temperature)
 	NormalizeData(temperature_map:Matrix().data)
 
-	return summerMap, winterMap, temperature_map
+	return summer_map, winter_map, temperature_map
 end
 -------------------------------------------------------------------------------------------
 function PW_GenerateRainfallMap(elevation_map)
@@ -2315,14 +2315,14 @@ function PW_GenerateRainfallMap(elevation_map)
 
 	local rect_map_options = { wrap_x = elevation_map.xWrap, wrap_y = elevation_map.yWrap}
 
-	local summerMap, winterMap, temperature_map = GenerateTempMaps(elevation_map)
+	local summer_map, winter_map, temperature_map = GenerateTempMaps(elevation_map)
 
 	local function pressure(x: number, y: number)
 		return GetGeostrophicPressure(LatitudeAtY(y))
 	end
-	local geoMap = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
-	geoMap:FillWith(pressure)
-	NormalizeData(geoMap:Matrix().data)
+	local geostrophic_map = PW_RectMap:New(elevation_map.width, elevation_map.height, rect_map_options)
+	geostrophic_map:FillWith(pressure)
+	NormalizeData(geostrophic_map:Matrix().data)
 
 	-- Using the otherwise unused z component of PW_Vector to define the ordering.
 	local summer_map_order = {}
@@ -2330,8 +2330,8 @@ function PW_GenerateRainfallMap(elevation_map)
 	for y = 0, elevation_map.height - 1 do
 		for x = 0, elevation_map.width - 1 do
 			local i = #summer_map_order
-			summer_map_order[i + 1] = PW_Vector3(x, y, summerMap:Get(x, y))
-			winter_map_order[i + 1] = PW_Vector3(x, y, winterMap:Get(x, y))
+			summer_map_order[i + 1] = PW_Vector3(x, y, summer_map:Get(x, y))
+			winter_map_order[i + 1] = PW_Vector3(x, y, winter_map:Get(x, y))
 		end
 	end
 	do
@@ -2397,9 +2397,9 @@ function PW_GenerateRainfallMap(elevation_map)
 		end
 	end
 
-	local rainfall_summer_map = DistributeRain(elevation_map, temperature_map, summerMap, summer_map_order, false)
-	local rainfall_winter_map = DistributeRain(elevation_map, temperature_map, winterMap, winter_map_order, false)
-	local rainfall_geostrophic_map = DistributeRain(elevation_map, temperature_map, geoMap, geo_map_order, true)
+	local rainfall_summer_map = DistributeRain(elevation_map, temperature_map, summer_map, summer_map_order, false)
+	local rainfall_winter_map = DistributeRain(elevation_map, temperature_map, winter_map, winter_map_order, false)
+	local rainfall_geostrophic_map = DistributeRain(elevation_map, temperature_map, geostrophic_map, geo_map_order, true)
 	local function rainfall(x: number, y: number)
 		return rainfall_summer_map:Get(x, y) + rainfall_winter_map:Get(x, y) + mc.geostrophicFactor * rainfall_geostrophic_map:Get(x, y)
 	end
