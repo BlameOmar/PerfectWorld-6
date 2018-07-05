@@ -3680,18 +3680,25 @@ function PW_RectCoordinates.FastHexArea(cx: number, cy: number, radius: number, 
 	local cy_cube = cy
 
 	local i = 0
-	for y = -radius, radius do
-		local x_min = math.max(-y - radius, -radius)
-		local x_max = math.min(-y + radius, radius)
-		for x = x_min, x_max do
-			local x_cube = x + cx_cube
-			local y_cube = y + cy_cube
 
+	local y_min = cy_cube - radius
+	local y_max = cy_cube + radius
+	if not map_options.wrap_y then
+		-- The y value is the same in rect and cube coordinates :)
+		y_min = math.max(0, y_min)
+		y_max = math.min(map_options.height - 1, y_max)
+	end
+
+	for y_cube = y_min, y_max do
+		local y_rel = y_cube - cy_cube
+		local x_min = math.max(-y_rel + cx_cube - radius, cx_cube - radius)
+		local x_max = math.min(-y_rel + cx_cube + radius, cx_cube + radius)
+		for x_cube = x_min, x_max do
 			-- Convert back to rect coordinates.
 			local x = x_cube + (y_cube - (y_cube % 2)) / 2
 			local y = y_cube
 
-			if (map_options.wrap_x or (0 <= x and x < map_options.width)) and (map_options.wrap_y or (0 <= y and y < map_options.height)) then
+			if map_options.wrap_x or (0 <= x and x < map_options.width) then
 				local offset = 2 * i
 				out_array[offset + 1] = x
 				out_array[offset + 2] = y
@@ -3722,27 +3729,34 @@ function PW_RectCoordinates.FastHexAreaMapReduce(cx: number, cy: number, radius:
 	local cx_cube = cx - (cy - (cy % 2)) / 2
 	local cy_cube = cy
 
-	local i = 0
+	local num_hexes = 0
 	local reduced = initial_value
-	for y = -radius, radius do
-		local x_min = math.max(-y - radius, -radius)
-		local x_max = math.min(-y + radius, radius)
-		for x = x_min, x_max do
-			local x_cube = x + cx_cube
-			local y_cube = y + cy_cube
 
+	local y_min = cy_cube - radius
+	local y_max = cy_cube + radius
+	if not map_options.wrap_y then
+		-- The y value is the same in rect and cube coordinates :)
+		y_min = math.max(0, y_min)
+		y_max = math.min(map_options.height - 1, y_max)
+	end
+
+	for y_cube = y_min, y_max do
+		local y_rel = y_cube - cy_cube
+		local x_min = math.max(-y_rel + cx_cube - radius, cx_cube - radius)
+		local x_max = math.min(-y_rel + cx_cube + radius, cx_cube + radius)
+		for x_cube = x_min, x_max do
 			-- Convert back to rect coordinates.
 			local x = x_cube + (y_cube - (y_cube % 2)) / 2
 			local y = y_cube
 
-			if (map_options.wrap_x or (0 <= x and x < map_options.width)) and (map_options.wrap_y or (0 <= y and y < map_options.height)) then
+			if map_options.wrap_x or (0 <= x and x < map_options.width) then
 				reduced = reduce_func(reduced, map_func(x, y))
-				i = i + 1
+				num_hexes = num_hexes + 1
 			end
 		end
 	end
 
-	return i, reduced
+	return num_hexes, reduced
 end
 
 --------------------------------------------------------------------------------
@@ -4233,6 +4247,7 @@ PW_Tests.MathTests = {}
 
 -- Wraps a `value` to the closed interval [`min`, `max`].
 function WrapWithinClosedRange(value: number, min: number, max: number)
+	if min <= value and value <= max then return value end
 	local shifted = value - min
 	local limit = max - min + 1
 	return shifted % limit + min
