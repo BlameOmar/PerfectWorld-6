@@ -286,7 +286,7 @@ function MapConstants:InitializeTemperature()
 	end
 	if temp == 1 then						--Cold
 		PW_Log("Setting cold world constants")
-		self.desertMinTemperature = 0.65
+		self.desertMinTemperature = 0.50
 		self.tundraTemperature = 0.35
 		self.snowTemperature = 0.20
 		
@@ -297,7 +297,7 @@ function MapConstants:InitializeTemperature()
 		self.iceSouthLatitudeLimit = -60
 	elseif temp == 3 then					--Warm
 		PW_Log("Setting warm world constants")
-		self.desertMinTemperature = 0.55
+		self.desertMinTemperature = 0.42
 		self.tundraTemperature = 0.26
 		self.snowTemperature = 0.10
 		
@@ -308,7 +308,7 @@ function MapConstants:InitializeTemperature()
 		self.iceSouthLatitudeLimit = -65
 	else									--Standard
 		PW_Log("Setting temperate world constants")
-		self.desertMinTemperature = 0.60	--Coldest absolute temperature allowed to be desert, plains if colder.
+		self.desertMinTemperature = 0.45	--Coldest absolute temperature allowed to be desert, plains if colder.
 		self.tundraTemperature = 0.31		--Absolute temperature below which is tundra.
 		self.snowTemperature = 0.15 		--Absolute temperature below which is snow.
 		
@@ -962,12 +962,6 @@ function FloatMap:GetIndex(x,y)
 	end
 
 	return yy * self.width + xx
-end
--------------------------------------------------------------------------------------------
-function FloatMap:GetXYFromIndex(i)
-	local x = i % self.width
-	local y = (i - x)/self.width
-	return x,y
 end
 -------------------------------------------------------------------------------------------
 --Gets an index for x and y based on the current
