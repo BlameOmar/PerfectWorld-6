@@ -1,4 +1,9 @@
 # PerfectWorld 6
+
+**This incomplete mod is not the same mod as PerfectWorld6 available on the Steam Workshop.
+I started porting Civ 5's PerfectWorld before that mod was released.
+I don't intend to continue work on this version.**
+
 Version 6.1
 
 Original script by Rich Marinaccio. Updated with contributions by:
